@@ -6,13 +6,40 @@ from telegram.ext import ContextTypes
 from asgiref.sync import sync_to_async
 from django.conf import settings
 
-from core.models import TelegramUser, DownloadHistory
+from core.models import TelegramUser, DownloadHistory, ShazamLog
 from django.utils import timezone
 from services.downloaders.factory import DownloaderFactory
+from services.shazam.service import ShazamService
 from .download import process_download
 from .search import format_results, build_search_keyboard
 
 DOWNLOADS_DIR = os.path.join(settings.BASE_DIR, 'downloads')
+shazam_service = ShazamService()
+
+
+async def _reply_shazam_from_callback(query, result: dict):
+    if result.get("is_successful"):
+        text = (
+            f"🎵 <b>{result.get('title')}</b>\n"
+            f"👤 <b>Ijrochi:</b> {result.get('artist')}\n"
+        )
+        if result.get("album"):
+            text += f"💿 <b>Albom:</b> {result.get('album')}\n"
+        if result.get("genre"):
+            text += f"🎶 <b>Janr:</b> {result.get('genre')}\n"
+        if result.get("shazam_url"):
+            text += f"\n🔗 <a href=\"{result.get('shazam_url')}\">Shazam da ochish</a>"
+        if result.get("cover"):
+            try:
+                await query.message.reply_photo(photo=result["cover"], caption=text, parse_mode="HTML")
+                return
+            except Exception:
+                pass
+        await query.message.reply_text(text, parse_mode="HTML")
+    else:
+        await query.message.reply_text(
+            f"Qo'shiqni aniqlab bo'lmadi.\n\nSabab: {result.get('error_message', 'Unknown')}"
+        )
 
 
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -190,3 +217,55 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             print(f'[ERROR] process_download xatolik: {e}')
             await query.message.reply_text("Yuklashda xatolik yuz berdi. Qaytadan urinib ko'ring.")
         return
+
+    if data.startswith("music_instagram_"):
+        parts = data.split("_", 2)  # music, instagram, hash
+        if len(parts) < 3:
+            await query.message.reply_text("Xatolik: noto'g'ri callback data.")
+            return
+
+        url_hash = parts[2]
+        url = context.user_data.get(f"url_{url_hash}")
+        if not url:
+            await query.message.reply_text("Havola topilmadi. Qayta yuboring.")
+            return
+
+        downloader = DownloaderFactory.get_downloader(url)
+        if not downloader:
+            await query.message.reply_text("Platforma aniqlanmadi.")
+            return
+
+        await query.message.reply_text("🎧 Musiqa qidirilmoqda (Shazam)...")
+
+        # Video faylni vaqtincha yuklab olamiz va shazam qilamiz
+        tmp_name = f"insta_music_{url_hash}_{query.message.message_id}.mp4"
+        tmp_path = os.path.join(DOWNLOADS_DIR, tmp_name)
+
+        file_path = await asyncio.to_thread(downloader.download_video, url, tmp_path, None)
+        if not file_path or not os.path.exists(file_path):
+            await query.message.reply_text(
+                "Video yuklab bo'lmadi. Ko'p hollarda bu ffmpeg yo'qligi sababli bo'ladi.\n"
+                "ffmpeg o'rnating va botni qayta ishga tushiring."
+            )
+            return
+
+        try:
+            result = await shazam_service.recognize(file_path)
+
+            # Log
+            tg_user = await sync_to_async(TelegramUser.objects.get)(telegram_id=query.from_user.id)
+            await sync_to_async(ShazamLog.objects.create)(
+                user=tg_user,
+                audio_file_name=os.path.basename(file_path),
+                recognized_title=result.get("title") if result and result.get("is_successful") else None,
+                recognized_artist=result.get("artist") if result and result.get("is_successful") else None,
+                is_successful=bool(result and result.get("is_successful")),
+                error_message=None if result and result.get("is_successful") else (result.get("error_message") if result else "No result"),
+            )
+
+            await _reply_shazam_from_callback(query, result or {"is_successful": False, "error_message": "No result"})
+        finally:
+            try:
+                os.remove(file_path)
+            except OSError:
+                pass
