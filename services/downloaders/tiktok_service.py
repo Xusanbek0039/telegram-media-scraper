@@ -3,6 +3,7 @@ import os
 import yt_dlp
 from typing import Optional, Dict, List
 from .base import BaseDownloader
+from .ytdl_utils import get_ydl_base_opts
 
 
 class TikTokService(BaseDownloader):
@@ -16,11 +17,7 @@ class TikTokService(BaseDownloader):
         return bool(pattern.search(url))
 
     def get_info(self, url: str) -> Optional[Dict]:
-        ydl_opts = {
-            'quiet': True,
-            'no_warnings': True,
-            'noplaylist': True,
-        }
+        ydl_opts = get_ydl_base_opts()
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
@@ -44,11 +41,9 @@ class TikTokService(BaseDownloader):
     def download_video(self, url: str, output_path: str, quality: Optional[str] = None) -> Optional[str]:
         video_id = str(abs(hash(url)))[-10:]
         ydl_opts = {
+            **get_ydl_base_opts(),
             'format': 'best[ext=mp4]/best',
             'outtmpl': output_path.replace('.mp4', '.%(ext)s'),
-            'quiet': True,
-            'no_warnings': True,
-            'noplaylist': True,
         }
 
         try:
@@ -65,6 +60,7 @@ class TikTokService(BaseDownloader):
 
     def download_audio(self, url: str, output_path: str) -> Optional[str]:
         ydl_opts = {
+            **get_ydl_base_opts(),
             'format': 'bestaudio/best',
             'outtmpl': output_path.replace('.mp3', '.%(ext)s'),
             'postprocessors': [{
@@ -72,9 +68,6 @@ class TikTokService(BaseDownloader):
                 'preferredcodec': 'mp3',
                 'preferredquality': '192',
             }],
-            'quiet': True,
-            'no_warnings': True,
-            'noplaylist': True,
         }
 
         try:
