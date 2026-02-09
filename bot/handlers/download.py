@@ -83,6 +83,7 @@ async def handle_download_request(update: Update, context: ContextTypes.DEFAULT_
         qualities = downloader.get_available_qualities(url)
         video_id = info.get('id', 'video')[:20]
         context.user_data[f'info_{url_hash}'] = info
+        context.user_data[f'video_id_{url_hash}'] = video_id  # Store for callback lookup
 
         caption = f"📁 {info['title']}\n"
         if info.get('channel'):

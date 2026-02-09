@@ -20,7 +20,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'bot',
+    'core',  # Core models
+    'bot',   # Bot app (legacy, kept for migrations)
 ]
 
 MIDDLEWARE = [
@@ -92,10 +93,11 @@ JAZZMIN_SETTINGS = {
     'site_brand': 'Music Bot',
     'welcome_sign': 'Telegram Music Bot - Admin Panel',
     'copyright': 'Telegram Music Bot',
-    'search_model': ['bot.TelegramUser'],
+    'search_model': ['core.TelegramUser'],
     'topmenu_links': [
         {'name': 'Bosh sahifa', 'url': 'admin:index'},
-        {'name': 'Reklama yuborish', 'url': '/admin/bot/broadcast/add/'},
+        {'name': 'Analytics', 'url': '/admin/analytics/'},
+        {'name': 'Bot Sozlamalari', 'url': '/admin/core/botsettings/1/change/'},
     ],
     'show_sidebar': True,
     'navigation_expanded': True,

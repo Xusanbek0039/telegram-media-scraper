@@ -87,7 +87,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data.startswith('ytdl_'):
         parts = data.split('_', 2)
-        video_id = parts[1]
+        callback_video_id = parts[1]
         quality = parts[2]
         
         # Get info and URL from context using video_id
@@ -95,14 +95,31 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         url = None
         url_hash = None
         
+        # Try to find matching context data by video_id
         for key in list(context.user_data.keys()):
-            if key.startswith('info_'):
-                stored_hash = key.replace('info_', '')
-                if context.user_data.get(f'url_{stored_hash}'):
-                    info = context.user_data[key]
-                    url = context.user_data[f'url_{stored_hash}']
+            if key.startswith('video_id_'):
+                stored_hash = key.replace('video_id_', '')
+                stored_video_id = context.user_data.get(key)
+                if stored_video_id == callback_video_id:
                     url_hash = stored_hash
+                    url = context.user_data.get(f'url_{stored_hash}')
+                    info = context.user_data.get(f'info_{stored_hash}')
                     break
+        
+        # Fallback: try to match by info
+        if not info or not url:
+            for key in list(context.user_data.keys()):
+                if key.startswith('info_'):
+                    stored_hash = key.replace('info_', '')
+                    stored_info = context.user_data.get(key)
+                    stored_url = context.user_data.get(f'url_{stored_hash}')
+                    if stored_info and stored_url:
+                        stored_video_id = str(stored_info.get('id', ''))[:20]
+                        if stored_video_id == callback_video_id:
+                            info = stored_info
+                            url = stored_url
+                            url_hash = stored_hash
+                            break
         
         if not info or not url:
             await query.message.reply_text("Video ma'lumotlari topilmadi. Havolani qayta yuboring.")
