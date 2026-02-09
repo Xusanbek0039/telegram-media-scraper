@@ -6,7 +6,7 @@ from telegram.ext import ContextTypes
 from asgiref.sync import sync_to_async
 from django.conf import settings
 
-from core.models import DownloadHistory
+from core.models import DownloadHistory, TelegramUser
 from services.downloaders.factory import DownloaderFactory
 
 DOWNLOADS_DIR = os.path.join(settings.BASE_DIR, 'downloads')
@@ -147,8 +147,9 @@ async def process_download(update: Update, context: ContextTypes.DEFAULT_TYPE, u
         await message.reply_text(f"⏳ {platform_name} dan video yuklanmoqda...")
         
         # Create download record
+        user = await sync_to_async(TelegramUser.objects.get)(telegram_id=update.effective_user.id)
         download_record = await sync_to_async(DownloadHistory.objects.create)(
-            user=await sync_to_async(lambda: TelegramUser.objects.get(telegram_id=update.effective_user.id))(),
+            user=user,
             video_url=url,
             video_title=info.get('title', 'Video'),
             platform=platform,
@@ -168,7 +169,8 @@ async def process_download(update: Update, context: ContextTypes.DEFAULT_TYPE, u
                 file_size = os.path.getsize(file_path)
                 download_record.status = 'completed'
                 download_record.file_size = file_size
-                download_record.completed_at = await sync_to_async(lambda: __import__('django.utils.timezone').timezone.now())()
+                from django.utils import timezone
+                download_record.completed_at = await sync_to_async(timezone.now)()
                 await sync_to_async(download_record.save)()
 
                 with open(file_path, 'rb') as f:
@@ -196,8 +198,9 @@ async def process_download(update: Update, context: ContextTypes.DEFAULT_TYPE, u
     elif format_type == 'audio':
         await message.reply_text(f"⏳ {platform_name} dan audio yuklanmoqda...")
         
+        user = await sync_to_async(TelegramUser.objects.get)(telegram_id=update.effective_user.id)
         download_record = await sync_to_async(DownloadHistory.objects.create)(
-            user=await sync_to_async(lambda: TelegramUser.objects.get(telegram_id=update.effective_user.id))(),
+            user=user,
             video_url=url,
             video_title=info.get('title', 'Audio'),
             platform=platform,
@@ -215,7 +218,8 @@ async def process_download(update: Update, context: ContextTypes.DEFAULT_TYPE, u
                 file_size = os.path.getsize(file_path)
                 download_record.status = 'completed'
                 download_record.file_size = file_size
-                download_record.completed_at = await sync_to_async(lambda: __import__('django.utils.timezone').timezone.now())()
+                from django.utils import timezone
+                download_record.completed_at = await sync_to_async(timezone.now)()
                 await sync_to_async(download_record.save)()
 
                 with open(file_path, 'rb') as f:
