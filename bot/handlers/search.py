@@ -1,11 +1,11 @@
-"""Search handlers - YouTube search"""
+"""Search handlers - Multi-source music search (YouTube + Spotify + Lyrics)."""
 import asyncio
-import yt_dlp
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from asgiref.sync import sync_to_async
 
 from core.models import SearchHistory
+from services.search.engine import multi_search_text
 
 
 def format_duration(seconds):
@@ -41,51 +41,65 @@ def format_results(results, page=0):
     return '\n'.join(lines)
 
 
-def search_youtube(query, limit=10):
-    """Search YouTube"""
-    ydl_opts = {
-        'quiet': True,
-        'no_warnings': True,
-        'extract_flat': True,
-        'default_search': f'ytsearch{limit}',
-    }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        try:
-            result = ydl.extract_info(query, download=False)
-            entries = result.get('entries', [])
-            results = []
-            for entry in entries:
-                if entry:
-                    results.append({
-                        'id': entry.get('id', ''),
-                        'title': entry.get('title', 'Noma\'lum'),
-                        'duration': entry.get('duration', 0),
-                        'url': f"https://www.youtube.com/watch?v={entry.get('id', '')}",
-                    })
-            return results
-        except Exception:
-            return []
-
-
 async def handle_search_request(update: Update, context: ContextTypes.DEFAULT_TYPE, user, query):
     """Handle search request"""
     if not query:
         await update.message.reply_text("Iltimos, qo'shiq nomini yozing.")
         return
 
-    await update.message.reply_text(f"🔍 \"{query}\" qidirilmoqda...")
-    results = await asyncio.to_thread(search_youtube, query)
-    await sync_to_async(SearchHistory.objects.create)(
-        user=user, query=query, results_count=len(results)
+    await update.message.reply_text(
+        f"🔍 \"{query}\" analiz qilinyapti...\n"
+        "1) YouTube Music\n2) Spotify\n3) Lyrics fallback"
     )
 
-    if not results:
+    search_result = await asyncio.to_thread(multi_search_text, query)
+    total_found = len(search_result.youtube) + len(search_result.spotify) + len(search_result.lyrics)
+    await sync_to_async(SearchHistory.objects.create)(
+        user=user, query=query, results_count=total_found
+    )
+
+    # 1) YouTube results
+    if search_result.youtube:
+        context.user_data['results'] = search_result.youtube
+        context.user_data['page'] = 0
+        text = "🎵 YouTube natijalari:\n\n" + format_results(search_result.youtube, page=0)
+        await update.message.reply_text(text, reply_markup=build_search_keyboard(page=0))
+
+        # If Spotify also found, share best link (UX: never stop)
+        if search_result.spotify and search_result.spotify[0].get("url"):
+            best = search_result.spotify[0]
+            await update.message.reply_text(
+                "✅ Spotify’da ham topildi:\n"
+                f"🎧 {best.get('title','')} — {best.get('artist','')}\n"
+                f"🔗 {best.get('url')}"
+            )
+        return
+
+    # 2) Spotify fallback
+    if search_result.spotify and search_result.spotify[0].get("url"):
+        best = search_result.spotify[0]
         await update.message.reply_text(
-            f"\"{query}\" bo'yicha hech narsa topilmadi.\nBoshqa nom bilan qidirib ko'ring."
+            "✅ Spotify’dan topildi:\n"
+            f"🎧 {best.get('title','')} — {best.get('artist','')}\n"
+            f"🔗 {best.get('url')}\n\n"
+            "Agar xohlasangiz, qo‘shiqdan **8–15 soniya** audio/voice yuboring — Shazam orqali aniqlab beraman."
         )
         return
 
-    context.user_data['results'] = results
-    context.user_data['page'] = 0
-    text = format_results(results, page=0)
-    await update.message.reply_text(text, reply_markup=build_search_keyboard(page=0))
+    # 3) Lyrics fallback (YouTube lyrics)
+    if search_result.lyrics:
+        context.user_data['results'] = search_result.lyrics
+        context.user_data['page'] = 0
+        text = "📝 Lyrics bo‘yicha topilgan natijalar:\n\n" + format_results(search_result.lyrics, page=0)
+        await update.message.reply_text(text, reply_markup=build_search_keyboard(page=0))
+        return
+
+    # Nothing found → guide user, never hard-stop
+    await update.message.reply_text(
+        "Hozircha aniq topa olmadim.\n\n"
+        "Quyidagilardan birini yuboring:\n"
+        "🎧 Ovozli xabar (8–15 soniya)\n"
+        "🎬 Video (qo‘shiq eshitiladigan joyi)\n"
+        "🔊 Audio fayl\n\n"
+        "Yoki qo‘shiq nomini boshqa variantda yozing (artist + title)."
+    )
