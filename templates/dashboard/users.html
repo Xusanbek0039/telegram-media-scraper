@@ -55,12 +55,16 @@
 
 {% block extra_js %}
 <script>
+var csrfToken = document.querySelector('meta[name=csrf-token]').getAttribute('content');
+function getCookie(n) { var c = document.cookie.match('(^|;)\\s*' + n + '\\s*=\\s*([^;]+)'); return c ? c.pop() : ''; }
+var csrf = csrfToken || getCookie('csrftoken');
 document.querySelectorAll('.user-premium').forEach(function(btn) {
     btn.addEventListener('click', function() {
         var pk = this.dataset.pk;
         var formData = new FormData();
-        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
-        fetch('/boshqaruv/foydalanuvchilar/' + pk + '/premium/', { method: 'POST', body: formData, headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+        formData.append('csrfmiddlewaretoken', csrf);
+        formData.append('X-CSRFToken', csrf);
+        fetch('/boshqaruv/foydalanuvchilar/' + pk + '/premium/', { method: 'POST', body: formData, headers: { 'X-CSRFToken': csrf, 'X-Requested-With': 'XMLHttpRequest' } })
             .then(r => r.json()).then(function(data) {
                 if (data.ok) {
                     if (data.is_premium) {
@@ -78,8 +82,8 @@ document.querySelectorAll('.user-ban').forEach(function(btn) {
     btn.addEventListener('click', function() {
         var pk = this.dataset.pk;
         var formData = new FormData();
-        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
-        fetch('/boshqaruv/foydalanuvchilar/' + pk + '/ban/', { method: 'POST', body: formData, headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+        formData.append('csrfmiddlewaretoken', csrf);
+        fetch('/boshqaruv/foydalanuvchilar/' + pk + '/ban/', { method: 'POST', body: formData, headers: { 'X-CSRFToken': csrf, 'X-Requested-With': 'XMLHttpRequest' } })
             .then(r => r.json()).then(function(data) {
                 if (data.ok) {
                     if (data.is_banned) {
