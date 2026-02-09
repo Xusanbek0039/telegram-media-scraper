@@ -1,74 +1,66 @@
-"""Shazam audio recognition service (improved)"""
+"""Shazam audio recognition service (improved for shazamio 0.8+)"""
+import logging
 import os
 import tempfile
 from typing import Optional, Dict
 
-from shazamio import Shazam
+from shazamio import Shazam, Serialize, HTTPClient
+from aiohttp_retry import ExponentialRetry
 from pydub import AudioSegment
+
+logger = logging.getLogger(__name__)
 
 
 class ShazamService:
-    """
-    Shazam audio recognition service.
-
-    Yaxshilangan yondashuv:
-    - Har xil formatdagi fayllarni (ogg, mp3, mp4, m4a, webm, ...) avtomatik o'qiydi
-    - Faqat 8–12 soniyalik audio bo'lagini ajratib oladi (Shazam uchun ideal)
-    - Mono, 44.1 kHz, 16-bit wav formatiga konvert qiladi
-    """
-
     def __init__(self):
-        self.shazam = Shazam()
+        self._shazam = None
+
+    def _get_shazam(self) -> Shazam:
+        if self._shazam is None:
+            self._shazam = Shazam(
+                http_client=HTTPClient(
+                    retry_options=ExponentialRetry(
+                        attempts=5,
+                        max_timeout=60.0,
+                        statuses={500, 502, 503, 504, 429},
+                    ),
+                ),
+            )
+        return self._shazam
 
     def _prepare_snippet(self, file_path: str) -> Optional[str]:
-        """
-        Kiruvchi audio/video fayldan qisqa audio bo'lak (snippet) tayyorlash.
-
-        Shazam odatda 5–15 soniya oralig'idagi, sifatli audio bilan eng yaxshi ishlaydi.
-        """
         if not os.path.exists(file_path):
             return None
 
         try:
-            # Pydub orqali har qanday formatni o'qish (ffmpeg talab qilinadi)
             audio = AudioSegment.from_file(file_path)
 
-            # Juda qisqa bo'lsa ham ishlayveradi, lekin 8–12 soniya oralig'ini olishga harakat qilamiz
             duration_ms = len(audio)
-            target_ms = 10_000  # 10 soniya
+            target_ms = 12_000
 
             if duration_ms <= target_ms:
                 snippet = audio
             else:
-                # O'rtasidan 10 soniya kesib olamiz — ko'p hollarda qo'shiqning asosiy qismi
                 start = max((duration_ms - target_ms) // 2, 0)
                 end = start + target_ms
                 snippet = audio[start:end]
 
-            # Mono, 44.1 kHz, 16-bit PCM — Shazam uchun standart
             snippet = snippet.set_channels(1).set_frame_rate(44_100).set_sample_width(2)
 
-            # Vaqtinchalik wav faylga saqlaymiz
             tmp_dir = tempfile.gettempdir()
-            out_path = os.path.join(tmp_dir, f"shazam_snippet_{os.path.basename(file_path)}.wav")
+            out_path = os.path.join(tmp_dir, f"shazam_snippet_{os.getpid()}_{os.path.basename(file_path)}.wav")
             snippet.export(out_path, format="wav")
             return out_path
-        except Exception:
-            # Agar konvert qilishda xatolik bo'lsa, to'g'ridan-to'g'ri original faylni ishlatib ko'ramiz
+        except Exception as e:
+            logger.warning("Snippet prepare error: %s", e)
             return file_path
 
     async def recognize(self, file_path: str) -> Optional[Dict]:
-        """
-        Recognize audio file using Shazam.
-
-        Args:
-            file_path: Original file path (voice, audio, video)
-
-        Returns:
-            Dict with recognition results or None if failed
-        """
         if not os.path.exists(file_path):
-            return None
+            return {
+                "is_successful": False,
+                "error_message": "Fayl topilmadi.",
+            }
 
         snippet_path = self._prepare_snippet(file_path)
         if not snippet_path or not os.path.exists(snippet_path):
@@ -78,39 +70,48 @@ class ShazamService:
             }
 
         try:
-            # ShazamIO ning hozirgi API'si: recognize(file_path)
-            result = await self.shazam.recognize(snippet_path)
-            track = result.get("track")
+            shazam = self._get_shazam()
+
+            with open(snippet_path, "rb") as f:
+                audio_bytes = f.read()
+
+            result = await shazam.recognize(audio_bytes)
+
+            track = result.get("track") if isinstance(result, dict) else None
 
             if not track:
                 return {
                     "is_successful": False,
-                    "error_message": "Shazam hech qanday qo'shiq topmadi.",
+                    "error_message": "Shazam hech qanday qo'shiq topmadi. Boshqa audio yuboring.",
                 }
+
+            album = ""
+            try:
+                sections = track.get("sections", [])
+                if sections and len(sections) > 0:
+                    metadata = sections[0].get("metadata", [])
+                    if metadata and len(metadata) > 0:
+                        album = metadata[0].get("text", "")
+            except Exception:
+                pass
 
             return {
                 "title": track.get("title", "Noma'lum"),
                 "artist": track.get("subtitle", "Noma'lum"),
-                "album": (
-                    track.get("sections", [{}])[0]
-                    .get("metadata", [{}])[0]
-                    .get("text", "")
-                    if track.get("sections")
-                    else ""
-                ),
+                "album": album,
                 "genre": track.get("genres", {}).get("primary", ""),
                 "shazam_url": track.get("url", ""),
-                "cover": track.get("images", {}).get("coverarthq", ""),
-                "lyrics": "",  # Keyinchalik kengaytirish mumkin
+                "cover": track.get("images", {}).get("coverarthq", "")
+                         or track.get("images", {}).get("coverart", ""),
                 "is_successful": True,
             }
         except Exception as e:
+            logger.error("Shazam recognize error: %s", e)
             return {
                 "is_successful": False,
-                "error_message": str(e),
+                "error_message": f"Shazam xatolik: {e}",
             }
         finally:
-            # Vaqtinchalik snippet faylini tozalaymiz
             if snippet_path and snippet_path != file_path:
                 try:
                     os.remove(snippet_path)
