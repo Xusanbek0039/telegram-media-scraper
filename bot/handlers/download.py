@@ -1,6 +1,9 @@
 """Download handlers - routes to downloader services"""
 import asyncio
 import os
+import shutil
+from urllib.parse import quote
+
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from asgiref.sync import sync_to_async
@@ -60,6 +63,109 @@ def build_social_keyboard(platform, url_hash):
     ])
 
 
+def _ffmpeg_available() -> bool:
+    """
+    ffmpeg bor-yo'qligini tekshiradi.
+    yt-dlp audio extract/merge uchun va Shazam (pydub) uchun ffmpeg kerak bo'ladi.
+    """
+    if shutil.which("ffmpeg") and shutil.which("ffprobe"):
+        return True
+    # .env orqali berilgan holat (FFMPEG_PATH exe yoki papka bo'lishi mumkin)
+    p = os.getenv("FFMPEG_PATH", "").strip()
+    if not p:
+        return False
+    if os.path.isfile(p) and os.path.basename(p).lower().startswith("ffmpeg"):
+        return True
+    if os.path.isdir(p) and os.path.isfile(os.path.join(p, "ffmpeg.exe")):
+        return True
+    return False
+
+
+def _build_instagram_keyboard(instagram_url: str, bot_username: str, url_hash: str) -> InlineKeyboardMarkup:
+    """
+    Instagram video tagidagi tugmalar:
+    - Musiqasini qidirish (Shazam)
+    - Do'stlarga yuborish (Share link)
+    """
+    bot_link = f"https://t.me/{bot_username}" if bot_username else ""
+    share_text = f"Instagram videosi. Bot: {bot_link} | Dasturchi: @Husanbek_coder"
+    share_url = f"https://t.me/share/url?url={quote(instagram_url)}&text={quote(share_text)}"
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("🎧 Musiqasini qidirish", callback_data=f"music_instagram_{url_hash}")],
+            [InlineKeyboardButton("📤 Do'stlarga yuborish", url=share_url)],
+        ]
+    )
+
+
+async def _send_instagram_direct(update: Update, context: ContextTypes.DEFAULT_TYPE, user, url: str, url_hash: str, downloader, info: dict):
+    """
+    Instagram link kelganda darhol video yuklab yuboradi.
+    """
+    platform = "instagram"
+    platform_name = PLATFORM_NAMES.get(platform, platform)
+
+    await update.message.reply_text("⏳ Instagram videosi yuklanmoqda...")
+
+    # DownloadHistory yozuvi
+    download_record = await sync_to_async(DownloadHistory.objects.create)(
+        user=user,
+        video_url=url,
+        video_title=info.get("title", "Instagram Video"),
+        platform=platform,
+        format_label="Video",
+        status="processing",
+    )
+
+    video_id = str(abs(hash(url)))[-10:]
+    output_path = os.path.join(DOWNLOADS_DIR, f"{platform}_{video_id}.mp4")
+
+    file_path = await asyncio.to_thread(downloader.download_video, url, output_path, None)
+    if not file_path or not os.path.exists(file_path):
+        download_record.status = "failed"
+        download_record.error_message = "Download failed"
+        await sync_to_async(download_record.save)()
+
+        msg = (
+            f"{platform_name} dan video yuklab bo'lmadi.\n\n"
+            "Ko'p hollarda bu **ffmpeg** o'rnatilmaganligi sababli bo'ladi (video+audio merge uchun).\n"
+            "Windows: `C:\\ffmpeg\\bin` ni PATH ga qo'shing yoki `.env` ga `FFMPEG_PATH=C:\\ffmpeg\\bin\\ffmpeg.exe` yozing."
+        )
+        await update.message.reply_text(msg)
+        return
+
+    try:
+        download_record.status = "completed"
+        download_record.file_size = os.path.getsize(file_path)
+        from django.utils import timezone
+        download_record.completed_at = await sync_to_async(timezone.now)()
+        await sync_to_async(download_record.save)()
+
+        me = await context.bot.get_me()
+        bot_username = getattr(me, "username", "") or ""
+        bot_link = f"https://t.me/{bot_username}" if bot_username else ""
+
+        caption = (
+            f"📁 {info.get('title', 'Instagram Video')}\n\n"
+            f"🤖 Bot: {bot_link}\n"
+            f"👨‍💻 Dasturchi: @Husanbek_coder"
+        )
+        keyboard = _build_instagram_keyboard(url, bot_username, url_hash)
+
+        with open(file_path, "rb") as f:
+            await update.message.reply_video(
+                video=f,
+                caption=caption,
+                reply_markup=keyboard,
+                supports_streaming=True,
+            )
+    finally:
+        try:
+            os.remove(file_path)
+        except OSError:
+            pass
+
+
 async def handle_download_request(update: Update, context: ContextTypes.DEFAULT_TYPE, user, url, downloader):
     """Handle download request - route to appropriate service"""
     platform = DownloaderFactory.detect_platform(url)
@@ -102,6 +208,12 @@ async def handle_download_request(update: Update, context: ContextTypes.DEFAULT_
                 pass
         await update.message.reply_text(caption, reply_markup=keyboard)
     else:
+        # Instagram: link yuborilganda darhol video yuboramiz
+        if platform == "instagram":
+            context.user_data[f'info_{url_hash}'] = info
+            await _send_instagram_direct(update, context, user, url, url_hash, downloader, info)
+            return
+
         # Social media platforms
         keyboard = build_social_keyboard(platform, url_hash)
         context.user_data[f'info_{url_hash}'] = info
@@ -209,6 +321,17 @@ async def process_download(update: Update, context: ContextTypes.DEFAULT_TYPE, u
             await message.reply_text("Video yuklab bo'lmadi.")
 
     elif format_type == 'audio':
+        if not _ffmpeg_available():
+            await message.reply_text(
+                "🎵 Audio yuklash uchun **ffmpeg/ffprobe** kerak.\n\n"
+                "Windows:\n"
+                "- `C:\\ffmpeg\\bin` ni PATH ga qo'shing\n"
+                "yoki `.env` ga:\n"
+                "- `FFMPEG_PATH=C:\\ffmpeg\\bin\\ffmpeg.exe`\n\n"
+                "So'ng botni qayta ishga tushiring."
+            )
+            return
+
         await message.reply_text(f"⏳ {platform_name} dan audio yuklanmoqda...")
         
         # Get user from update
