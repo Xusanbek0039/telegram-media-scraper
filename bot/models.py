@@ -3,19 +3,21 @@ from django.db import models
 
 class TelegramUser(models.Model):
     telegram_id = models.BigIntegerField(unique=True, verbose_name='Telegram ID')
-    username = models.CharField(max_length=255, null=True, blank=True, verbose_name='Username')
+    username = models.CharField(max_length=255, blank=True, null=True, verbose_name='Username')
     first_name = models.CharField(max_length=255, verbose_name='Ism')
-    last_name = models.CharField(max_length=255, null=True, blank=True, verbose_name='Familiya')
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Yaratilgan vaqt')
+    last_name = models.CharField(max_length=255, blank=True, null=True, verbose_name='Familiya')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Ro\'yxatdan o\'tgan vaqt')
     last_active = models.DateTimeField(auto_now=True, verbose_name='Oxirgi faollik')
 
     class Meta:
-        verbose_name = 'Telegram foydalanuvchi'
-        verbose_name_plural = 'Telegram foydalanuvchilar'
+        verbose_name = 'Foydalanuvchi'
+        verbose_name_plural = 'Foydalanuvchilar'
         ordering = ['-last_active']
 
     def __str__(self):
-        return f'{self.first_name} (@{self.username})' if self.username else self.first_name
+        if self.username:
+            return f'@{self.username}'
+        return self.first_name
 
 
 class SearchHistory(models.Model):
