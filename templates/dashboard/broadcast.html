@@ -1,0 +1,49 @@
+{% extends 'dashboard/base.html' %}
+{% block title %}Reklama yuborish — Bot boshqaruvi{% endblock %}
+{% block content %}
+<h1 class="h4 mb-4">Reklama yuborish</h1>
+<div class="row">
+    <div class="col-lg-6">
+        <div class="card mb-4">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">Yangi reklama</h5>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{% url 'dashboard:broadcast' %}">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label class="form-label">Xabar matni (HTML qoʻllab-quvvatlanadi)</label>
+                        <textarea name="message" class="form-control" rows="5" placeholder="Barcha foydalanuvchilarga yuboriladigan xabar..." required></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-send"></i> Yuborish
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">Oxirgi reklamalar</h5>
+            </div>
+            <div class="card-body p-0">
+                <ul class="list-group list-group-flush">
+                    {% for b in broadcasts %}
+                    <li class="list-group-item">
+                        <div class="d-flex justify-content-between">
+                            <span class="text-muted small">{{ b.created_at|date:"d.m.Y H:i" }}</span>
+                            <span class="badge {% if b.status == 'sent' %}bg-success{% elif b.status == 'sending' %}bg-warning text-dark{% elif b.status == 'failed' %}bg-danger{% else %}bg-secondary{% endif %}">{{ b.get_status_display }}</span>
+                        </div>
+                        <p class="mb-1 mt-1">{{ b.message|truncatewords:15 }}</p>
+                        <small class="text-muted">Yuborildi: {{ b.sent_count }} | Xatolik: {{ b.failed_count }}</small>
+                    </li>
+                    {% empty %}
+                    <li class="list-group-item text-center text-muted">Hali reklama yuborilmagan</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
