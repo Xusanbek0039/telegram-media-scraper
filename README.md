@@ -61,6 +61,22 @@ source venv/bin/activate  # Linux/Mac
 pip install -r requirements.txt
 ```
 
+### 2.1. FFmpeg o'rnatish (majburiy)
+
+Video/audio yuklash va Shazam uchun **ffmpeg** talab qilinadi.
+
+**Windows:**
+1. [ffmpeg](https://www.gyan.dev/ffmpeg/builds/) dan yuklab oling (ffmpeg-release-essentials.zip)
+2. Qayib `C:\ffmpeg` ga joylashtiring
+3. `C:\ffmpeg\bin` ni tizim PATH ga qo'shing:
+   - Settings → System → About → Advanced system settings → Environment Variables
+   - Path → Edit → New → `C:\ffmpeg\bin`
+
+**PATH da bo'lmasa**, `.env` ga qo'shing:
+```
+FFMPEG_PATH=C:\ffmpeg\bin\ffmpeg.exe
+```
+
 ### 3. `.env` faylini sozlash
 
 `.env.example` faylidan nusxa oling:
