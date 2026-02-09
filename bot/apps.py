@@ -1,4 +1,3 @@
-import os
 from django.apps import AppConfig
 
 
@@ -7,7 +6,5 @@ class BotConfig(AppConfig):
     name = 'bot'
     verbose_name = 'Telegram Bot'
 
-    def ready(self):
-        if os.environ.get('RUN_MAIN') == 'true':
-            from bot.telegram_bot import start_bot
-            start_bot()
+    # Bot Django ichidan ishga tushirilmaydi.
+    # Botni alohida ishga tushiring: python bot/run_bot.py
