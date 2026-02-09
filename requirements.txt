@@ -6,6 +6,7 @@ httpx
 yt-dlp
 django-jazzmin
 shazamio
+aiohttp-retry
 Pillow
 aiofiles
 pydub
