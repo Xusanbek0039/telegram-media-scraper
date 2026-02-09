@@ -1,0 +1,111 @@
+{% extends 'dashboard/base.html' %}
+{% block title %}Havolalar va xabarlar — Bot boshqaruvi{% endblock %}
+{% block content %}
+<h1 class="h4 mb-4">Havolalar va xabarlar</h1>
+<p class="text-muted">Qaysi foydalanuvchi qaysi havolani yuborganini va Shazam soʻrovlarini koʻring.</p>
+
+<div class="row">
+    <div class="col-lg-4 mb-4">
+        <div class="card">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">Foydalanuvchini tanlang</h5>
+            </div>
+            <div class="list-group list-group-flush" style="max-height: 400px; overflow-y: auto;">
+                <a href="{% url 'dashboard:history' %}" class="list-group-item list-group-item-action {% if not selected_user %}active{% endif %}">
+                    Barchasi
+                </a>
+                {% for u in users_with_activity %}
+                <a href="?user_id={{ u.pk }}" class="list-group-item list-group-item-action {% if selected_user.pk == u.pk %}active{% endif %}">
+                    {{ u.first_name }} {% if u.username %}@{{ u.username }}{% endif %}
+                    <span class="badge bg-secondary float-end">{{ u.downloads_count }} yuklash</span>
+                </a>
+                {% empty %}
+                <li class="list-group-item text-muted">Faollik yoʻq</li>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-8">
+        {% if selected_user %}
+        <div class="card mb-4">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">{{ selected_user }} — yuborilgan havolalar</h5>
+                <a href="{% url 'dashboard:user_detail' selected_user.pk %}" class="btn btn-sm btn-outline-primary">Toʻliq profil</a>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Video / Havola</th>
+                                <th>Platforma</th>
+                                <th>Format</th>
+                                <th>Holat</th>
+                                <th>Vaqt</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for d in downloads %}
+                            <tr>
+                                <td>
+                                    <a href="{{ d.video_url }}" target="_blank" rel="noopener" class="link-cell d-inline-block" style="max-width: 220px;" title="{{ d.video_url }}">{{ d.video_title|truncatewords:5 }}</a>
+                                </td>
+                                <td><span class="badge platform-badge bg-secondary">{{ d.get_platform_display }}</span></td>
+                                <td>{{ d.format_label }}</td>
+                                <td>
+                                    {% if d.status == 'completed' %}<span class="badge bg-success">Yakunlandi</span>
+                                    {% elif d.status == 'failed' %}<span class="badge bg-danger">Xatolik</span>
+                                    {% else %}<span class="badge bg-warning text-dark">{{ d.get_status_display }}</span>{% endif %}
+                                </td>
+                                <td><small>{{ d.downloaded_at|date:"d.m.Y H:i" }}</small></td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="5" class="text-center text-muted py-3">Yuklashlar yoʻq</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">Shazam soʻrovlari</h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Aniqlangan qoʻshiq</th>
+                                <th>Ijrochi</th>
+                                <th>Holat</th>
+                                <th>Vaqt</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for s in shazam_logs %}
+                            <tr>
+                                <td>{{ s.recognized_title|default:"—" }}</td>
+                                <td>{{ s.recognized_artist|default:"—" }}</td>
+                                <td>{% if s.is_successful %}<span class="badge bg-success">Muvaffaqiyatli</span>{% else %}<span class="badge bg-danger">Aniqlanmadi</span>{% endif %}</td>
+                                <td><small>{{ s.recognized_at|date:"d.m.Y H:i" }}</small></td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="4" class="text-center text-muted py-3">Shazam soʻrovlari yoʻq</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="card">
+            <div class="card-body text-center text-muted py-5">
+                <i class="bi bi-chat-left-text" style="font-size: 3rem;"></i>
+                <p class="mt-2">Chapdan foydalanuvchini tanlang — uning yuborgan havolalari va Shazam soʻrovlari koʻrinadi.</p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
