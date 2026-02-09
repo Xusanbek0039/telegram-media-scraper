@@ -7,6 +7,7 @@ from asgiref.sync import sync_to_async
 from django.conf import settings
 
 from core.models import TelegramUser, DownloadHistory
+from django.utils import timezone
 from services.downloaders.factory import DownloaderFactory
 from .download import process_download
 from .search import format_results, build_search_keyboard
@@ -58,7 +59,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         if file_path and os.path.exists(file_path):
             try:
-                user = await sync_to_async(lambda: TelegramUser.objects.get(telegram_id=query.from_user.id))()
+                user = await sync_to_async(TelegramUser.objects.get)(telegram_id=query.from_user.id)
                 await sync_to_async(DownloadHistory.objects.create)(
                     user=user,
                     video_url=url,
@@ -67,6 +68,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     format_label='Audio',
                     status='completed',
                     file_size=os.path.getsize(file_path),
+                    completed_at=await sync_to_async(timezone.now)(),
                 )
                 with open(file_path, 'rb') as f:
                     await query.message.reply_audio(
@@ -87,33 +89,27 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parts = data.split('_', 2)
         video_id = parts[1]
         quality = parts[2]
-        info = context.user_data.get('video_info')
         
-        # Try to get from url_hash context
-        for key in context.user_data:
+        # Get info and URL from context using video_id
+        info = None
+        url = None
+        url_hash = None
+        
+        for key in list(context.user_data.keys()):
             if key.startswith('info_'):
-                info = context.user_data[key]
-                url_hash = key.replace('info_', '')
-                break
+                stored_hash = key.replace('info_', '')
+                if context.user_data.get(f'url_{stored_hash}'):
+                    info = context.user_data[key]
+                    url = context.user_data[f'url_{stored_hash}']
+                    url_hash = stored_hash
+                    break
         
-        if not info:
+        if not info or not url:
             await query.message.reply_text("Video ma'lumotlari topilmadi. Havolani qayta yuboring.")
             return
 
         label = f'{quality}p' if quality != 'audio' else 'Audio'
         await query.message.reply_text(f"⏳ \"{info['title']}\" ({label}) yuklanmoqda...")
-
-        # Get URL from context
-        url = None
-        for key in context.user_data:
-            if key.startswith('url_'):
-                url = context.user_data[key]
-                url_hash = key.replace('url_', '')
-                break
-
-        if not url:
-            await query.message.reply_text("Havola topilmadi.")
-            return
 
         downloader = DownloaderFactory.get_downloader(url)
         if not downloader:
@@ -130,7 +126,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if file_path and os.path.exists(file_path):
             try:
-                user = await sync_to_async(lambda: TelegramUser.objects.get(telegram_id=query.from_user.id))()
+                user = await sync_to_async(TelegramUser.objects.get)(telegram_id=query.from_user.id)
                 await sync_to_async(DownloadHistory.objects.create)(
                     user=user,
                     video_url=url,
@@ -139,6 +135,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     format_label=label,
                     status='completed',
                     file_size=os.path.getsize(file_path),
+                    completed_at=await sync_to_async(timezone.now)(),
                 )
                 with open(file_path, 'rb') as f:
                     if quality == 'audio':
