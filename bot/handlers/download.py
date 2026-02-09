@@ -124,10 +124,16 @@ async def handle_download_request(update: Update, context: ContextTypes.DEFAULT_
 
 async def process_download(update: Update, context: ContextTypes.DEFAULT_TYPE, url_hash: str, format_type: str, quality: str = None):
     """Process download using appropriate service"""
-    from telegram import CallbackQuery
-
-    query = update.callback_query if isinstance(update, CallbackQuery) else None
-    message = query.message if query else update.message
+    # Get message from update (callback query or regular message)
+    if update.callback_query:
+        query = update.callback_query
+        message = query.message
+    else:
+        message = update.message
+    
+    if not message:
+        print('[ERROR] Message topilmadi')
+        return
 
     url = context.user_data.get(f'url_{url_hash}')
     platform = context.user_data.get(f'platform_{url_hash}')
@@ -147,8 +153,14 @@ async def process_download(update: Update, context: ContextTypes.DEFAULT_TYPE, u
     if format_type == 'video':
         await message.reply_text(f"⏳ {platform_name} dan video yuklanmoqda...")
         
+        # Get user from update
+        user_id = update.effective_user.id if update.effective_user else (update.callback_query.from_user.id if update.callback_query else None)
+        if not user_id:
+            await message.reply_text("Foydalanuvchi ma'lumotlari topilmadi.")
+            return
+        
         # Create download record
-        user = await sync_to_async(TelegramUser.objects.get)(telegram_id=update.effective_user.id)
+        user = await sync_to_async(TelegramUser.objects.get)(telegram_id=user_id)
         download_record = await sync_to_async(DownloadHistory.objects.create)(
             user=user,
             video_url=url,
@@ -199,7 +211,13 @@ async def process_download(update: Update, context: ContextTypes.DEFAULT_TYPE, u
     elif format_type == 'audio':
         await message.reply_text(f"⏳ {platform_name} dan audio yuklanmoqda...")
         
-        user = await sync_to_async(TelegramUser.objects.get)(telegram_id=update.effective_user.id)
+        # Get user from update
+        user_id = update.effective_user.id if update.effective_user else (update.callback_query.from_user.id if update.callback_query else None)
+        if not user_id:
+            await message.reply_text("Foydalanuvchi ma'lumotlari topilmadi.")
+            return
+        
+        user = await sync_to_async(TelegramUser.objects.get)(telegram_id=user_id)
         download_record = await sync_to_async(DownloadHistory.objects.create)(
             user=user,
             video_url=url,

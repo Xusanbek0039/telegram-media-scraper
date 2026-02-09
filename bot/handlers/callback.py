@@ -176,9 +176,17 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data.startswith('social_video_') or data.startswith('social_audio_'):
         parts = data.split('_')
+        if len(parts) < 4:
+            await query.message.reply_text("Xatolik: noto'g'ri callback data.")
+            return
+        
         action = parts[1]  # 'video' or 'audio'
         platform = parts[2]
         url_hash = parts[3]
 
-        await process_download(update, context, url_hash, action, None)
+        try:
+            await process_download(update, context, url_hash, action, None)
+        except Exception as e:
+            print(f'[ERROR] process_download xatolik: {e}')
+            await query.message.reply_text("Yuklashda xatolik yuz berdi. Qaytadan urinib ko'ring.")
         return
