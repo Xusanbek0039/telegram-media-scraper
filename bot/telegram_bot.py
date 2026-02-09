@@ -2,6 +2,7 @@ import asyncio
 import os
 import re
 import threading
+import tempfile
 import yt_dlp
 from django.conf import settings
 from asgiref.sync import sync_to_async
@@ -16,18 +17,33 @@ from bot.models import TelegramUser, SearchHistory, DownloadHistory
 DOWNLOADS_DIR = os.path.join(settings.BASE_DIR, 'downloads')
 os.makedirs(DOWNLOADS_DIR, exist_ok=True)
 
-YOUTUBE_REGEX = re.compile(
-    r'(https?://)?(www\.)?(youtube\.com/watch\?v=|youtu\.be/|youtube\.com/shorts/)[\w\-]+'
-)
+URL_PATTERNS = {
+    'youtube': re.compile(
+        r'(https?://)?(www\.)?(youtube\.com/(watch\?v=|shorts/)|youtu\.be/)[\w\-]+'
+    ),
+    'instagram': re.compile(
+        r'(https?://)?(www\.)?(instagram\.com/(p|reel|tv|reels)/[\w\-]+)'
+    ),
+    'tiktok': re.compile(
+        r'(https?://)?(www\.|vm\.|vt\.)?tiktok\.com/[\w\-@/.]+'
+    ),
+    'snapchat': re.compile(
+        r'(https?://)?(www\.)?(snapchat\.com|story\.snapchat\.com)/[\w\-/.]+'
+    ),
+    'likee': re.compile(
+        r'(https?://)?(www\.|l\.)?(likee\.video|like\.video)/[\w\-/.]+'
+    ),
+}
 
-VIDEO_FORMATS = [
-    ('144p', '160'),
-    ('240p', '133'),
-    ('360p', '18'),
-    ('480p', '135'),
-    ('720p', '22'),
-    ('1080p', '137'),
-]
+PLATFORM_NAMES = {
+    'youtube': 'YouTube',
+    'instagram': 'Instagram',
+    'tiktok': 'TikTok',
+    'snapchat': 'Snapchat',
+    'likee': 'Likee',
+}
+
+VIDEO_QUALITIES = ['144', '240', '360', '480', '720', '1080']
 
 
 @sync_to_async
@@ -51,10 +67,7 @@ def save_search(user, query, results_count):
 @sync_to_async
 def save_download(user, video_url, video_title, format_label):
     DownloadHistory.objects.create(
-        user=user,
-        video_url=video_url,
-        video_title=video_title,
-        format_label=format_label,
+        user=user, video_url=video_url, video_title=video_title, format_label=format_label,
     )
 
 
@@ -72,8 +85,153 @@ def format_filesize(size_bytes):
     mb = size_bytes / (1024 * 1024)
     if mb >= 1:
         return f'{mb:.1f}MB'
-    kb = size_bytes / 1024
-    return f'{kb:.0f}KB'
+    return f'{size_bytes / 1024:.0f}KB'
+
+
+def detect_platform(text):
+    for platform, pattern in URL_PATTERNS.items():
+        match = pattern.search(text)
+        if match:
+            return platform, match.group(0)
+    return None, None
+
+
+def get_video_info(url):
+    ydl_opts = {
+        'quiet': True,
+        'no_warnings': True,
+        'noplaylist': True,
+    }
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        try:
+            info = ydl.extract_info(url, download=False)
+            return {
+                'title': info.get('title', 'Video'),
+                'channel': info.get('channel', info.get('uploader', '')),
+                'thumbnail': info.get('thumbnail', ''),
+                'duration': info.get('duration', 0),
+                'formats': info.get('formats', []),
+                'url': url,
+                'id': info.get('id', 'video'),
+            }
+        except Exception:
+            return None
+
+
+def get_available_qualities(formats):
+    available = []
+    seen = set()
+    for f in formats:
+        height = f.get('height')
+        if not height or f.get('vcodec') == 'none':
+            continue
+        label = str(height)
+        if label not in seen and label in VIDEO_QUALITIES:
+            filesize = f.get('filesize') or f.get('filesize_approx') or 0
+            seen.add(label)
+            available.append({'label': f'{label}p', 'height': label, 'filesize': filesize})
+
+    available.sort(key=lambda x: int(x['height']))
+
+    audio_size = 0
+    for f in formats:
+        if f.get('acodec') != 'none' and f.get('vcodec') == 'none':
+            audio_size = f.get('filesize') or f.get('filesize_approx') or 0
+            break
+    available.append({'label': 'Audio', 'height': 'audio', 'filesize': audio_size})
+
+    return available
+
+
+def download_media(url, quality, video_id):
+    if quality == 'audio':
+        output_path = os.path.join(DOWNLOADS_DIR, f'{video_id}_audio.mp3')
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'outtmpl': os.path.join(DOWNLOADS_DIR, f'{video_id}_audio.%(ext)s'),
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }],
+            'quiet': True,
+            'no_warnings': True,
+            'noplaylist': True,
+        }
+    else:
+        output_path = os.path.join(DOWNLOADS_DIR, f'{video_id}_{quality}.mp4')
+        ydl_opts = {
+            'format': f'best[height<={quality}][ext=mp4]/best[height<={quality}]/best',
+            'outtmpl': os.path.join(DOWNLOADS_DIR, f'{video_id}_{quality}.%(ext)s'),
+            'quiet': True,
+            'no_warnings': True,
+            'noplaylist': True,
+            'merge_output_format': 'mp4',
+        }
+
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        ydl.download([url])
+
+    if os.path.exists(output_path):
+        return output_path
+
+    for ext in ['mp4', 'webm', 'mkv', 'mp3', 'm4a']:
+        alt = os.path.join(DOWNLOADS_DIR, f'{video_id}_{quality}.{ext}')
+        if os.path.exists(alt):
+            return alt
+    return None
+
+
+def download_social_video(url, platform):
+    video_id = str(hash(url))[-10:]
+    output_path = os.path.join(DOWNLOADS_DIR, f'{platform}_{video_id}.mp4')
+
+    ydl_opts = {
+        'format': 'best[ext=mp4]/best',
+        'outtmpl': os.path.join(DOWNLOADS_DIR, f'{platform}_{video_id}.%(ext)s'),
+        'quiet': True,
+        'no_warnings': True,
+        'noplaylist': True,
+    }
+
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=True)
+        title = info.get('title', 'Video')
+
+    if os.path.exists(output_path):
+        return output_path, title
+
+    for ext in ['mp4', 'webm', 'mkv']:
+        alt = os.path.join(DOWNLOADS_DIR, f'{platform}_{video_id}.{ext}')
+        if os.path.exists(alt):
+            return alt, title
+    return None, title
+
+
+def download_social_audio(url, platform):
+    video_id = str(hash(url))[-10:]
+    output_path = os.path.join(DOWNLOADS_DIR, f'{platform}_{video_id}_audio.mp3')
+
+    ydl_opts = {
+        'format': 'bestaudio/best',
+        'outtmpl': os.path.join(DOWNLOADS_DIR, f'{platform}_{video_id}_audio.%(ext)s'),
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '192',
+        }],
+        'quiet': True,
+        'no_warnings': True,
+        'noplaylist': True,
+    }
+
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=True)
+        title = info.get('title', 'Audio')
+
+    if os.path.exists(output_path):
+        return output_path, title
+    return None, title
 
 
 def search_youtube(query, limit=10):
@@ -94,107 +252,59 @@ def search_youtube(query, limit=10):
                         'id': entry.get('id', ''),
                         'title': entry.get('title', 'Noma\'lum'),
                         'duration': entry.get('duration', 0),
-                        'url': entry.get('url') or f"https://www.youtube.com/watch?v={entry.get('id', '')}",
+                        'url': f"https://www.youtube.com/watch?v={entry.get('id', '')}",
                     })
             return results
         except Exception:
             return []
 
 
-def get_video_info(url):
-    ydl_opts = {
-        'quiet': True,
-        'no_warnings': True,
-    }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        try:
-            info = ydl.extract_info(url, download=False)
-            title = info.get('title', 'Noma\'lum')
-            channel = info.get('channel', info.get('uploader', 'Noma\'lum'))
-            thumbnail = info.get('thumbnail', '')
-
-            available_formats = []
-            formats = info.get('formats', [])
-
-            for label, fmt_id in VIDEO_FORMATS:
-                for f in formats:
-                    if f.get('format_id') == fmt_id:
-                        filesize = f.get('filesize') or f.get('filesize_approx') or 0
-                        available_formats.append({
-                            'label': label,
-                            'format_id': fmt_id,
-                            'filesize': filesize,
-                        })
-                        break
-
-            if not available_formats:
-                for f in formats:
-                    height = f.get('height')
-                    if height and f.get('vcodec') != 'none':
-                        label = f'{height}p'
-                        filesize = f.get('filesize') or f.get('filesize_approx') or 0
-                        if not any(af['label'] == label for af in available_formats):
-                            available_formats.append({
-                                'label': label,
-                                'format_id': f.get('format_id', ''),
-                                'filesize': filesize,
-                            })
-
-            audio_size = 0
-            for f in formats:
-                if f.get('acodec') != 'none' and f.get('vcodec') == 'none':
-                    audio_size = f.get('filesize') or f.get('filesize_approx') or 0
-                    break
-
-            available_formats.append({
-                'label': 'Audio',
-                'format_id': 'audio',
-                'filesize': audio_size,
-            })
-
-            return {
-                'title': title,
-                'channel': channel,
-                'thumbnail': thumbnail,
-                'formats': available_formats,
-                'url': url,
-            }
-        except Exception:
+async def recognize_shazam(file_path):
+    from shazamio import Shazam
+    shazam = Shazam()
+    try:
+        result = await shazam.recognize(file_path)
+        track = result.get('track')
+        if not track:
             return None
-
-
-def download_video(url, format_id, video_id):
-    if format_id == 'audio':
-        ext = 'mp3'
-        output_path = os.path.join(DOWNLOADS_DIR, f'{video_id}_audio.{ext}')
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'outtmpl': os.path.join(DOWNLOADS_DIR, f'{video_id}_audio.%(ext)s'),
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }],
-            'quiet': True,
-            'no_warnings': True,
+        return {
+            'title': track.get('title', 'Noma\'lum'),
+            'artist': track.get('subtitle', 'Noma\'lum'),
+            'album': track.get('sections', [{}])[0].get('metadata', [{}])[0].get('text', '') if track.get('sections') else '',
+            'genre': track.get('genres', {}).get('primary', ''),
+            'shazam_url': track.get('url', ''),
+            'cover': track.get('images', {}).get('coverarthq', ''),
+            'lyrics': '',
         }
-    else:
-        ext = 'mp4'
-        output_path = os.path.join(DOWNLOADS_DIR, f'{video_id}_{format_id}.{ext}')
-        ydl_opts = {
-            'format': f'{format_id}+bestaudio/best',
-            'outtmpl': os.path.join(DOWNLOADS_DIR, f'{video_id}_{format_id}.%(ext)s'),
-            'merge_output_format': 'mp4',
-            'quiet': True,
-            'no_warnings': True,
-        }
+    except Exception:
+        return None
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ydl.download([url])
 
-    if os.path.exists(output_path):
-        return output_path
-    return None
+def build_youtube_keyboard(qualities, video_id):
+    rows = []
+    row = []
+    for fmt in qualities:
+        label = fmt['label']
+        size = format_filesize(fmt['filesize'])
+        icon = '🎵' if label == 'Audio' else '📁'
+        btn_text = f"{icon} {label} - {size}"
+        callback = f"ytdl_{video_id}_{fmt['height']}"
+        row.append(InlineKeyboardButton(btn_text, callback_data=callback))
+        if len(row) == 2 or label == 'Audio':
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    return InlineKeyboardMarkup(rows)
+
+
+def build_social_keyboard(platform, url_hash):
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton('📁 Video', callback_data=f'social_video_{platform}_{url_hash}'),
+            InlineKeyboardButton('🎵 Audio', callback_data=f'social_audio_{platform}_{url_hash}'),
+        ]
+    ])
 
 
 def build_search_keyboard(page=0):
@@ -209,33 +319,13 @@ def build_search_keyboard(page=0):
     return InlineKeyboardMarkup([row1, row2, row3])
 
 
-def build_format_keyboard(formats, video_id):
-    rows = []
-    row = []
-    for i, fmt in enumerate(formats):
-        label = fmt['label']
-        size = format_filesize(fmt['filesize'])
-        icon = '🎵' if label == 'Audio' else '📁'
-        btn_text = f"{icon} {label} - {size}"
-        callback = f"dl_{video_id}_{fmt['format_id']}"
-        row.append(InlineKeyboardButton(btn_text, callback_data=callback))
-        if len(row) == 2 or label == 'Audio':
-            rows.append(row)
-            row = []
-    if row:
-        rows.append(row)
-    return InlineKeyboardMarkup(rows)
-
-
 def format_results(results, page=0):
     start = page * 10
     page_results = results[start:start + 10]
     lines = []
     for i, track in enumerate(page_results):
         num = start + i + 1
-        title = track['title']
-        duration = format_duration(track.get('duration'))
-        lines.append(f'{num}. {title} {duration}')
+        lines.append(f'{num}. {track["title"]} {format_duration(track.get("duration"))}')
     return '\n'.join(lines)
 
 
@@ -243,9 +333,18 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await save_user(update.effective_user)
     await update.message.reply_text(
         f"Salom, {update.effective_user.first_name}! 🎵\n\n"
-        "Men sizga musiqa topishda yordam beraman.\n"
-        "Qo'shiq nomini yoki artis ismini yozing, men sizga topib beraman!\n\n"
-        "YouTube havolasini yuborsangiz, videoni yuklab beraman!"
+        "🔍 Qo'shiq nomini yozing — men topib beraman\n\n"
+        "📥 Quyidagi platformalar havolasini yuboring:\n"
+        "• YouTube (video + shorts)\n"
+        "• Instagram (post, reel, IGTV)\n"
+        "• TikTok (suv belgisiz)\n"
+        "• Snapchat\n"
+        "• Likee\n\n"
+        "🎤 Shazam:\n"
+        "• Ovozli xabar yuboring\n"
+        "• Audio/video yuboring\n"
+        "• Video xabar yuboring\n"
+        "— qo'shiqni aniqlab beraman!"
     )
 
 
@@ -253,8 +352,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = await save_user(update.effective_user)
     text = update.message.text.strip()
 
-    if YOUTUBE_REGEX.search(text):
-        await handle_youtube_url(update, context, user, text)
+    platform, url = detect_platform(text)
+
+    if platform == 'youtube':
+        await handle_youtube_url(update, context, user, url)
+    elif platform in ('instagram', 'tiktok', 'snapchat', 'likee'):
+        await handle_social_url(update, context, user, platform, url)
     else:
         await handle_search(update, context, user, text)
 
@@ -263,32 +366,59 @@ async def handle_youtube_url(update: Update, context: ContextTypes.DEFAULT_TYPE,
     await update.message.reply_text("⏳ Video ma'lumotlari olinmoqda...")
 
     info = await asyncio.to_thread(get_video_info, url)
-
     if not info:
         await update.message.reply_text("Video ma'lumotlarini olishda xatolik yuz berdi.")
         return
 
     context.user_data['video_info'] = info
+    qualities = get_available_qualities(info['formats'])
 
-    caption = (
-        f"📁 {info['title']}\n\n"
-        f"👤 {info['channel']} →\n\n"
-        f"Formats to download ↓"
-    )
+    caption = f"📁 {info['title']}\n"
+    if info.get('channel'):
+        caption += f"👤 {info['channel']}\n"
+    caption += "\nFormats to download ↓"
 
-    keyboard = build_format_keyboard(info['formats'], info.get('id', 'vid'))
+    keyboard = build_youtube_keyboard(qualities, info['id'][:20])
 
     if info.get('thumbnail'):
         try:
             await update.message.reply_photo(
-                photo=info['thumbnail'],
-                caption=caption,
-                reply_markup=keyboard,
+                photo=info['thumbnail'], caption=caption, reply_markup=keyboard,
             )
             return
         except Exception:
             pass
+    await update.message.reply_text(caption, reply_markup=keyboard)
 
+
+async def handle_social_url(update: Update, context: ContextTypes.DEFAULT_TYPE, user, platform, url):
+    platform_name = PLATFORM_NAMES.get(platform, platform)
+    url_hash = str(abs(hash(url)))[-10:]
+    context.user_data[f'social_url_{url_hash}'] = url
+
+    await update.message.reply_text("⏳ Ma'lumotlar olinmoqda...")
+
+    info = await asyncio.to_thread(get_video_info, url)
+    if not info:
+        await update.message.reply_text(f"{platform_name} dan yuklab bo'lmadi. Havolani tekshiring.")
+        return
+
+    context.user_data[f'social_info_{url_hash}'] = info
+    keyboard = build_social_keyboard(platform, url_hash)
+
+    caption = f"📁 {info['title']}\n"
+    if info.get('channel'):
+        caption += f"👤 {info['channel']}\n"
+    caption += f"\n📥 {platform_name} dan yuklash ↓"
+
+    if info.get('thumbnail'):
+        try:
+            await update.message.reply_photo(
+                photo=info['thumbnail'], caption=caption, reply_markup=keyboard,
+            )
+            return
+        except Exception:
+            pass
     await update.message.reply_text(caption, reply_markup=keyboard)
 
 
@@ -298,23 +428,118 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE, user
         return
 
     await update.message.reply_text(f"🔍 \"{query}\" qidirilmoqda...")
-
     results = await asyncio.to_thread(search_youtube, query)
     await save_search(user, query, len(results))
 
     if not results:
         await update.message.reply_text(
-            f"\"{query}\" bo'yicha hech narsa topilmadi.\n"
-            "Boshqa nom bilan qidirib ko'ring."
+            f"\"{query}\" bo'yicha hech narsa topilmadi.\nBoshqa nom bilan qidirib ko'ring."
         )
         return
 
     context.user_data['results'] = results
     context.user_data['page'] = 0
-
     text = format_results(results, page=0)
-    keyboard = build_search_keyboard(page=0)
-    await update.message.reply_text(text, reply_markup=keyboard)
+    await update.message.reply_text(text, reply_markup=build_search_keyboard(page=0))
+
+
+async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await save_user(update.effective_user)
+    await update.message.reply_text("🎤 Qo'shiq aniqlanmoqda...")
+
+    voice = update.message.voice or update.message.audio
+    if not voice:
+        return
+
+    file = await context.bot.get_file(voice.file_id)
+    tmp = os.path.join(DOWNLOADS_DIR, f'shazam_{update.message.message_id}.ogg')
+    await file.download_to_drive(tmp)
+
+    try:
+        result = await recognize_shazam(tmp)
+        if result:
+            await send_shazam_result(update, result)
+        else:
+            await update.message.reply_text("Qo'shiqni aniqlab bo'lmadi. Qaytadan urinib ko'ring.")
+    finally:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+
+
+async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await save_user(update.effective_user)
+    await update.message.reply_text("🎤 Qo'shiq aniqlanmoqda...")
+
+    video = update.message.video or update.message.video_note
+    if not video:
+        return
+
+    file = await context.bot.get_file(video.file_id)
+    tmp = os.path.join(DOWNLOADS_DIR, f'shazam_video_{update.message.message_id}.mp4')
+    await file.download_to_drive(tmp)
+
+    try:
+        result = await recognize_shazam(tmp)
+        if result:
+            await send_shazam_result(update, result)
+        else:
+            await update.message.reply_text("Qo'shiqni aniqlab bo'lmadi. Qaytadan urinib ko'ring.")
+    finally:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+
+
+async def handle_audio_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await save_user(update.effective_user)
+    await update.message.reply_text("🎤 Qo'shiq aniqlanmoqda...")
+
+    audio = update.message.audio or update.message.document
+    if not audio:
+        return
+
+    file = await context.bot.get_file(audio.file_id)
+    ext = 'mp3'
+    if hasattr(audio, 'file_name') and audio.file_name:
+        ext = audio.file_name.split('.')[-1] if '.' in audio.file_name else 'mp3'
+    tmp = os.path.join(DOWNLOADS_DIR, f'shazam_audio_{update.message.message_id}.{ext}')
+    await file.download_to_drive(tmp)
+
+    try:
+        result = await recognize_shazam(tmp)
+        if result:
+            await send_shazam_result(update, result)
+        else:
+            await update.message.reply_text("Qo'shiqni aniqlab bo'lmadi. Qaytadan urinib ko'ring.")
+    finally:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+
+
+async def send_shazam_result(update, result):
+    text = (
+        f"🎵 <b>{result['title']}</b>\n"
+        f"👤 <b>Ijrochi:</b> {result['artist']}\n"
+    )
+    if result.get('album'):
+        text += f"💿 <b>Albom:</b> {result['album']}\n"
+    if result.get('genre'):
+        text += f"🎶 <b>Janr:</b> {result['genre']}\n"
+    if result.get('shazam_url'):
+        text += f"\n🔗 <a href=\"{result['shazam_url']}\">Shazam da ochish</a>"
+
+    if result.get('cover'):
+        try:
+            await update.message.reply_photo(photo=result['cover'], caption=text, parse_mode='HTML')
+            return
+        except Exception:
+            pass
+    await update.message.reply_text(text, parse_mode='HTML')
 
 
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -335,8 +560,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         context.user_data['page'] = page
         text = format_results(results, page=page)
-        keyboard = build_search_keyboard(page=page)
-        await query.message.edit_text(text, reply_markup=keyboard)
+        await query.message.edit_text(text, reply_markup=build_search_keyboard(page=page))
         return
 
     if data.startswith('select_'):
@@ -346,69 +570,48 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         track = results[index]
         await query.message.reply_text(f"⏳ \"{track['title']}\" yuklanmoqda...")
-        audio_path = await asyncio.to_thread(download_video, track['url'], 'audio', track['id'])
+        audio_path = await asyncio.to_thread(download_media, track['url'], 'audio', track['id'])
         if audio_path and os.path.exists(audio_path):
             try:
                 user = await save_user(query.from_user)
                 await save_download(user, track['url'], track['title'], 'Audio')
                 with open(audio_path, 'rb') as f:
-                    await query.message.reply_audio(
-                        audio=f, title=track['title'], caption=f"🎵 {track['title']}"
-                    )
+                    await query.message.reply_audio(audio=f, title=track['title'], caption=f"🎵 {track['title']}")
             except Exception:
-                await query.message.reply_text("Xatolik yuz berdi. Qaytadan urinib ko'ring.")
+                await query.message.reply_text("Xatolik yuz berdi.")
             finally:
                 try:
                     os.remove(audio_path)
                 except OSError:
                     pass
         else:
-            await query.message.reply_text("Audio yuklab bo'lmadi. Boshqa qo'shiqni tanlang.")
+            await query.message.reply_text("Audio yuklab bo'lmadi.")
         return
 
-    if data.startswith('dl_'):
+    if data.startswith('ytdl_'):
         parts = data.split('_', 2)
-        if len(parts) < 3:
-            return
-        format_id = parts[2]
-
-        video_info = context.user_data.get('video_info')
-        if not video_info:
+        video_id = parts[1]
+        quality = parts[2]
+        info = context.user_data.get('video_info')
+        if not info:
             await query.message.reply_text("Video ma'lumotlari topilmadi. Havolani qayta yuboring.")
             return
 
-        fmt_label = format_id
-        for fmt in video_info.get('formats', []):
-            if fmt['format_id'] == format_id:
-                fmt_label = fmt['label']
-                break
+        label = f'{quality}p' if quality != 'audio' else 'Audio'
+        await query.message.reply_text(f"⏳ \"{info['title']}\" ({label}) yuklanmoqda...")
 
-        url = video_info['url']
-        title = video_info['title']
-        video_id = url.split('=')[-1].split('/')[-1][:20]
-
-        await query.message.reply_text(f"⏳ \"{title}\" ({fmt_label}) yuklanmoqda...")
-
-        file_path = await asyncio.to_thread(download_video, url, format_id, video_id)
-
+        file_path = await asyncio.to_thread(download_media, info['url'], quality, video_id)
         if file_path and os.path.exists(file_path):
             try:
                 user = await save_user(query.from_user)
-                await save_download(user, url, title, fmt_label)
+                await save_download(user, info['url'], info['title'], label)
                 with open(file_path, 'rb') as f:
-                    if format_id == 'audio':
-                        await query.message.reply_audio(
-                            audio=f, title=title, caption=f"🎵 {title}"
-                        )
+                    if quality == 'audio':
+                        await query.message.reply_audio(audio=f, title=info['title'], caption=f"🎵 {info['title']}")
                     else:
-                        await query.message.reply_video(
-                            video=f, caption=f"📁 {title} ({fmt_label})",
-                            supports_streaming=True,
-                        )
+                        await query.message.reply_video(video=f, caption=f"📁 {info['title']} ({label})", supports_streaming=True)
             except Exception:
-                await query.message.reply_text(
-                    "Fayl juda katta yoki xatolik yuz berdi. Kichikroq formatni tanlang."
-                )
+                await query.message.reply_text("Fayl juda katta yoki xatolik yuz berdi. Kichikroq formatni tanlang.")
             finally:
                 try:
                     os.remove(file_path)
@@ -416,6 +619,56 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     pass
         else:
             await query.message.reply_text("Yuklab bo'lmadi. Boshqa formatni tanlang.")
+        return
+
+    if data.startswith('social_video_') or data.startswith('social_audio_'):
+        parts = data.split('_')
+        action = parts[1]
+        platform = parts[2]
+        url_hash = parts[3]
+
+        url = context.user_data.get(f'social_url_{url_hash}')
+        if not url:
+            await query.message.reply_text("Havola topilmadi. Qayta yuboring.")
+            return
+
+        platform_name = PLATFORM_NAMES.get(platform, platform)
+        await query.message.reply_text(f"⏳ {platform_name} dan yuklanmoqda...")
+
+        if action == 'video':
+            file_path, title = await asyncio.to_thread(download_social_video, url, platform)
+            if file_path and os.path.exists(file_path):
+                try:
+                    user = await save_user(query.from_user)
+                    await save_download(user, url, title, f'{platform_name} Video')
+                    with open(file_path, 'rb') as f:
+                        await query.message.reply_video(video=f, caption=f"📁 {title}", supports_streaming=True)
+                except Exception:
+                    await query.message.reply_text("Fayl juda katta yoki xatolik yuz berdi.")
+                finally:
+                    try:
+                        os.remove(file_path)
+                    except OSError:
+                        pass
+            else:
+                await query.message.reply_text("Video yuklab bo'lmadi.")
+        else:
+            file_path, title = await asyncio.to_thread(download_social_audio, url, platform)
+            if file_path and os.path.exists(file_path):
+                try:
+                    user = await save_user(query.from_user)
+                    await save_download(user, url, title, f'{platform_name} Audio')
+                    with open(file_path, 'rb') as f:
+                        await query.message.reply_audio(audio=f, title=title, caption=f"🎵 {title}")
+                except Exception:
+                    await query.message.reply_text("Xatolik yuz berdi.")
+                finally:
+                    try:
+                        os.remove(file_path)
+                    except OSError:
+                        pass
+            else:
+                await query.message.reply_text("Audio yuklab bo'lmadi.")
 
 
 def _run_bot():
@@ -430,6 +683,9 @@ def _run_bot():
     app = Application.builder().token(token).build()
     app.add_handler(CommandHandler('start', start_command))
     app.add_handler(CallbackQueryHandler(callback_handler))
+    app.add_handler(MessageHandler(filters.VOICE, handle_voice))
+    app.add_handler(MessageHandler(filters.VIDEO | filters.VIDEO_NOTE, handle_video))
+    app.add_handler(MessageHandler(filters.AUDIO, handle_audio_file))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     print('[BOT] Telegram bot ishga tushdi!')
