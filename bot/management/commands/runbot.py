@@ -1,23 +1,23 @@
 import requests
-from asgiref.sync import sync_to_async
-from django.conf import settings
 from django.core.management.base import BaseCommand
+from django.conf import settings
+from asgiref.sync import sync_to_async
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
-from bot.models import SearchHistory, TelegramUser
+from bot.models import TelegramUser, SearchHistory
 
 ITUNES_SEARCH_URL = 'https://itunes.apple.com/search'
 
 
 @sync_to_async
-def save_user(telegram_user):
+def save_user(tg_user):
     user, _ = TelegramUser.objects.update_or_create(
-        telegram_id=telegram_user.id,
+        telegram_id=tg_user.id,
         defaults={
-            'username': telegram_user.username,
-            'first_name': telegram_user.first_name or '',
-            'last_name': telegram_user.last_name,
+            'username': tg_user.username or '',
+            'first_name': tg_user.first_name or '',
+            'last_name': tg_user.last_name or '',
         },
     )
     return user
@@ -41,53 +41,62 @@ def search_music(query):
         )
         response.raise_for_status()
         return response.json().get('results', [])
-    except requests.RequestException:
+    except Exception:
         return []
 
 
-async def start_command(update: Update, context):
-    user = await save_user(update.effective_user)
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await save_user(update.effective_user)
     await update.message.reply_text(
-        f"Assalomu alaykum, {user.first_name}! 🎵\n\n"
-        "Men musiqa qidiruv botiman. Menga qo'shiq nomini yozing, "
-        "men sizga iTunes'dan natijalarni topib beraman."
+        f"Salom, {update.effective_user.first_name}! 🎵\n\n"
+        "Men sizga musiqa topishda yordam beraman.\n"
+        "Qo'shiq nomini yoki artis ismini yozing, men sizga topib beraman!"
     )
 
 
-async def search_handler(update: Update, context):
+async def search_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = await save_user(update.effective_user)
     query = update.message.text.strip()
+
     if not query:
-        await update.message.reply_text("Iltimos, qo'shiq nomini kiriting.")
+        await update.message.reply_text("Iltimos, qo'shiq nomini yozing.")
         return
 
-    user = await save_user(update.effective_user)
-    await update.message.reply_text("🔍 Qidirilmoqda...")
+    await update.message.reply_text(f"🔍 \"{query}\" qidirilmoqda...")
 
     results = search_music(query)
     await save_search(user, query, len(results))
 
     if not results:
         await update.message.reply_text(
-            "😔 Afsuski, hech qanday natija topilmadi. "
-            "Boshqa so'rov bilan urinib ko'ring."
+            f"\"{query}\" bo'yicha hech narsa topilmadi.\n"
+            "Boshqa nom bilan qidirib ko'ring."
         )
         return
 
-    text = f"🎵 \"{query}\" bo'yicha natijalar:\n\n"
-    for i, track in enumerate(results, 1):
-        track_name = track.get('trackName', 'Nomalum')
-        artist = track.get('artistName', 'Nomalum')
-        album = track.get('collectionName', 'Nomalum')
+    for track in results:
+        track_name = track.get('trackName', 'Noma\'lum')
+        artist = track.get('artistName', 'Noma\'lum')
+        album = track.get('collectionName', 'Noma\'lum')
         preview_url = track.get('previewUrl', '')
+        track_url = track.get('trackViewUrl', '')
 
-        text += f"{i}. 🎶 {track_name}\n"
-        text += f"   🎤 Ijrochi: {artist}\n"
-        text += f"   💿 Albom: {album}\n"
+        text = (
+            f"🎵 {track_name}\n"
+            f"👤 Artis: {artist}\n"
+            f"💿 Albom: {album}\n"
+        )
+
+        if track_url:
+            text += f"🔗 [iTunes'da ochish]({track_url})\n"
+
+        await update.message.reply_text(text, parse_mode='Markdown')
+
         if preview_url:
-            text += f"   🔗 Tinglash: {preview_url}\n"
-        text += "\n"
-
-    await update.message.reply_text(text)
+            try:
+                await update.message.reply_audio(audio=preview_url)
+            except Exception:
+                pass
 
 
 class Command(BaseCommand):
@@ -103,9 +112,9 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS('Bot ishga tushmoqda...'))
 
-        app = ApplicationBuilder().token(token).build()
+        app = Application.builder().token(token).build()
         app.add_handler(CommandHandler('start', start_command))
-        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_handler))
+        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_command))
 
-        self.stdout.write(self.style.SUCCESS('Bot muvaffaqiyatli ishga tushdi!'))
-        app.run_polling()
+        self.stdout.write(self.style.SUCCESS('Bot tayyor! Ctrl+C bosib to\'xtatishingiz mumkin.'))
+        app.run_polling(allowed_updates=Update.ALL_TYPES)

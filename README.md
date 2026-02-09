@@ -1,119 +1,88 @@
-# telegram-media-scraper
-# 🚀 Master Down Bot — Telegram Media Downloader
+# Telegram Musiqa Qidiruv Bot
 
-🔥 **Master Down Bot** — bu Telegram orqali turli ijtimoiy tarmoqlardan video, audio va media fayllarni yuklab olish imkonini beruvchi zamonaviy bot. Bot Instagram, TikTok, Snapchat, Likee va Pinterest kabi platformalardan kontent yuklab olishni osonlashtiradi hamda Shazam funksiyasi orqali qo‘shiqlarni aniqlay oladi.
+Django frameworkida yaratilgan Telegram bot. Foydalanuvchi musiqa nomini yozsa, bot iTunes orqali qo'shiqlarni topib beradi.
 
----
+## Imkoniyatlar
 
-## 📌 Asosiy imkoniyatlar
+- Musiqa nomini yozib qidirish
+- Artis va albom ma'lumotlarini ko'rsatish
+- Qo'shiq preview'ini yuborish
+- Django admin panelda foydalanuvchilar va qidiruv tarixini ko'rish
 
-✅ Instagram — post, reels va IGTV (audio bilan)
-✅ TikTok — suv belgisiz video + audio
-✅ Snapchat — suv belgisiz video
-✅ Likee — suv belgisiz video
-✅ Pinterest — video va rasmlar yuklab olish
+## O'rnatish
 
-🎵 **Shazam funksiyasi:**
-
-* Qo‘shiq nomini aniqlash
-* Ijrochini topish
-* Qo‘shiq matnini chiqarish
-* Ovozli xabar, audio va video orqali aniqlash
-
-🤖 Bot guruhlarda ham ishlaydi.
-
----
-
-## 🧠 Texnologiyalar
-
-* Python
-* Telegram Bot API
-* aiogram / pyTelegramBotAPI
-* yt-dlp (media yuklash uchun)
-* FFmpeg (audio/video ishlov berish)
-* Django Admin (agar admin panel mavjud bo‘lsa)
-
----
-
-## 📂 Project Structure
-
-```
-master-downbot/
-│
-├── bot/
-│   ├── handlers/
-│   ├── keyboards/
-│   ├── services/
-│   └── utils/
-│
-├── config/
-├── requirements.txt
-├── .env.example
-└── README.md
-```
-
----
-
-## ⚙️ O‘rnatish (Installation)
-
-1️⃣ Reponi clone qiling:
-
-```bash
-git clone https://github.com/your-username/master-downbot.git
-cd master-downbot
-```
-
-2️⃣ Virtual environment yarating:
+### 1. Virtual muhit yaratish
 
 ```bash
 python -m venv venv
-source venv/bin/activate   # Linux / Mac
-venv\Scripts\activate      # Windows
+venv\Scripts\activate  # Windows
+# yoki
+source venv/bin/activate  # Linux/Mac
 ```
 
-3️⃣ Kerakli kutubxonalarni o‘rnating:
+### 2. Kutubxonalarni o'rnatish
 
 ```bash
 pip install -r requirements.txt
 ```
 
-4️⃣ `.env` fayl yarating va bot token qo‘shing:
+### 3. `.env` faylini sozlash
 
-```
-BOT_TOKEN=your_telegram_bot_token
-```
-
----
-
-## ▶️ Botni ishga tushirish
+`.env.example` faylidan nusxa oling:
 
 ```bash
-python main.py
+copy .env.example .env
 ```
 
----
+`.env` faylini tahrirlang va quyidagi qiymatlarni kiriting:
 
-## 💬 Foydalanish
+- `TELEGRAM_BOT_TOKEN` — @BotFather dan olingan bot token
+- `SECRET_KEY` — Django secret key
 
-1. Telegramda botni oching
-2. Yuklab olmoqchi bo‘lgan video linkini yuboring
-3. Bot avtomatik media faylni yuklab beradi 🚀
+### 4. Ma'lumotlar bazasini yaratish
 
----
+```bash
+python manage.py migrate
+```
 
-## 🔐 Ogohlantirish
+### 5. Admin foydalanuvchi yaratish
 
-Loyiha faqat ta’limiy maqsadlarda yaratilgan. Mualliflik huquqi va platforma qoidalariga amal qiling.
+```bash
+python manage.py createsuperuser
+```
 
----
+### 6. Botni ishga tushirish
 
-## 👨‍💻 Muallif
+```bash
+python manage.py runbot
+```
 
-Developed by **Suyunov Husan**
-YouTube: **IT Creative**
+### 7. Admin panelga kirish
 
----
+Django serverni ishga tushiring:
 
-## ⭐ Support
+```bash
+python manage.py runserver
+```
 
-Agar loyiha sizga foydali bo‘lsa, repositoryga ⭐ bosishni unutmang!
+Brauzerda oching: http://127.0.0.1:8000/admin/
+
+## Loyiha tuzilishi
+
+```
+telegram-media-scraper/
+├── config/              # Django sozlamalari
+│   ├── settings.py
+│   ├── urls.py
+│   ├── wsgi.py
+│   └── asgi.py
+├── bot/                 # Bot ilovasi
+│   ├── models.py        # TelegramUser, SearchHistory
+│   ├── admin.py         # Admin panel sozlamalari
+│   └── management/
+│       └── commands/
+│           └── runbot.py  # Bot ishga tushirish buyrug'i
+├── manage.py
+├── requirements.txt
+└── .env.example
+```
