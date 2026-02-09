@@ -1,5 +1,6 @@
 """Callback handlers"""
 import asyncio
+import logging
 import os
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -9,12 +10,63 @@ from django.conf import settings
 from core.models import TelegramUser, DownloadHistory, ShazamLog
 from django.utils import timezone
 from services.downloaders.factory import DownloaderFactory
+from services.downloaders.ytdl_utils import get_ydl_base_opts
 from services.shazam.service import ShazamService
 from .download import process_download
 from .search import format_results, build_search_keyboard
 
+logger = logging.getLogger(__name__)
+
 DOWNLOADS_DIR = os.path.join(settings.BASE_DIR, 'downloads')
+os.makedirs(DOWNLOADS_DIR, exist_ok=True)
 shazam_service = ShazamService()
+
+
+async def _download_youtube_audio(url: str, video_id: str) -> str | None:
+    """Download audio from YouTube URL, return file path or None."""
+    import yt_dlp
+
+    output_path = os.path.join(DOWNLOADS_DIR, f'{video_id}_audio')
+    base_opts = get_ydl_base_opts()
+
+    ydl_opts = {
+        **base_opts,
+        'format': 'bestaudio/best',
+        'outtmpl': f'{output_path}.%(ext)s',
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '192',
+        }],
+    }
+
+    try:
+        def _do_download():
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([url])
+
+        await asyncio.to_thread(_do_download)
+    except Exception as e:
+        logger.error("Audio download error (with ffmpeg): %s", e)
+        ydl_opts_fallback = {
+            **base_opts,
+            'format': 'bestaudio/best',
+            'outtmpl': f'{output_path}.%(ext)s',
+        }
+        try:
+            def _do_fallback():
+                with yt_dlp.YoutubeDL(ydl_opts_fallback) as ydl:
+                    ydl.download([url])
+            await asyncio.to_thread(_do_fallback)
+        except Exception as e2:
+            logger.error("Audio fallback download error: %s", e2)
+            return None
+
+    for ext in ['mp3', 'm4a', 'webm', 'ogg', 'opus', 'wav']:
+        p = f'{output_path}.{ext}'
+        if os.path.exists(p):
+            return p
+    return None
 
 
 async def _reply_shazam_from_callback(query, result: dict):
@@ -57,72 +109,115 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data.startswith('page_'):
         results = context.user_data.get('results', [])
         page = int(data.split('_')[1])
-        if page < 0 or page * 10 >= len(results):
+        total_pages = (len(results) + 4) // 5
+        if page < 0 or page >= total_pages:
             return
         context.user_data['page'] = page
         text = format_results(results, page=page)
-        await query.message.edit_text(text, reply_markup=build_search_keyboard(page=page))
+        text += "\n\n👇 Qo'shiqni tanlang — audio yuklab beriladi"
+        await query.message.edit_text(
+            text, reply_markup=build_search_keyboard(results, page=page)
+        )
         return
 
     if data.startswith('select_'):
         results = context.user_data.get('results', [])
         index = int(data.split('_')[1])
         if index < 0 or index >= len(results):
-            return
-        track = results[index]
-        await query.message.reply_text(f"⏳ \"{track['title']}\" yuklanmoqda...")
-        
-        # Download audio
-        url = track['url']
-        downloader = DownloaderFactory.get_downloader(url)
-        if not downloader:
-            await query.message.reply_text("Yuklab bo'lmadi.")
+            await query.message.reply_text("Natija topilmadi. Qaytadan qidiring.")
             return
 
-        video_id = track['id']
-        output_path = os.path.join(DOWNLOADS_DIR, f'{video_id}_audio.mp3')
-        
-        file_path = await asyncio.to_thread(downloader.download_audio, url, output_path)
-        
+        track = results[index]
+        title = track.get('title', 'Audio')
+        url = track.get('url', '')
+        video_id = track.get('id', '')
+
+        if not url:
+            await query.message.reply_text("URL topilmadi. Qaytadan qidiring.")
+            return
+
+        if not url.startswith("http"):
+            url = f"https://www.youtube.com/watch?v={video_id}"
+
+        status_msg = await query.message.reply_text(
+            f"⏳ \"{title}\" yuklanmoqda...\n"
+            "Biroz kuting..."
+        )
+
+        file_path = await _download_youtube_audio(url, video_id)
+
         if file_path and os.path.exists(file_path):
             try:
-                user = await sync_to_async(TelegramUser.objects.get)(telegram_id=query.from_user.id)
+                user = await sync_to_async(TelegramUser.objects.get)(
+                    telegram_id=query.from_user.id
+                )
                 await sync_to_async(DownloadHistory.objects.create)(
                     user=user,
                     video_url=url,
-                    video_title=track['title'],
+                    video_title=title,
                     platform='youtube',
                     format_label='Audio',
                     status='completed',
                     file_size=os.path.getsize(file_path),
                     completed_at=await sync_to_async(timezone.now)(),
                 )
-                with open(file_path, 'rb') as f:
-                    await query.message.reply_audio(
-                        audio=f, title=track['title'], caption=f"🎵 {track['title']}"
-                    )
+            except Exception as e:
+                logger.warning("DownloadHistory save error: %s", e)
+
+            try:
+                await status_msg.delete()
             except Exception:
-                await query.message.reply_text("Xatolik yuz berdi.")
+                pass
+
+            try:
+                file_size = os.path.getsize(file_path)
+                if file_size > 50 * 1024 * 1024:
+                    await query.message.reply_text(
+                        f"⚠️ \"{title}\" hajmi {file_size // (1024*1024)}MB — "
+                        "Telegram limiti 50MB. Kichikroq qo'shiq tanlang."
+                    )
+                else:
+                    with open(file_path, 'rb') as f:
+                        await query.message.reply_audio(
+                            audio=f,
+                            title=title,
+                            performer=track.get('artist', ''),
+                            caption=f"🎵 {title}",
+                        )
+            except Exception as e:
+                logger.error("Send audio error: %s", e)
+                await query.message.reply_text(
+                    f"Yuborishda xatolik: {e}\n"
+                    "Qaytadan urinib ko'ring."
+                )
             finally:
                 try:
                     os.remove(file_path)
                 except OSError:
                     pass
         else:
-            await query.message.reply_text("Audio yuklab bo'lmadi.")
+            try:
+                await status_msg.delete()
+            except Exception:
+                pass
+            await query.message.reply_text(
+                f"❌ \"{title}\" yuklab bo'lmadi.\n\n"
+                "💡 Sabablar:\n"
+                "• ffmpeg o'rnatilmagan bo'lishi mumkin\n"
+                "• Video cheklangan bo'lishi mumkin\n\n"
+                "Boshqa qo'shiqni tanlang yoki qaytadan qidiring."
+            )
         return
 
     if data.startswith('ytdl_'):
         parts = data.split('_', 2)
         callback_video_id = parts[1]
         quality = parts[2]
-        
-        # Get info and URL from context using video_id
+
         info = None
         url = None
         url_hash = None
-        
-        # Try to find matching context data by video_id
+
         for key in list(context.user_data.keys()):
             if key.startswith('video_id_'):
                 stored_hash = key.replace('video_id_', '')
@@ -132,8 +227,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     url = context.user_data.get(f'url_{stored_hash}')
                     info = context.user_data.get(f'info_{stored_hash}')
                     break
-        
-        # Fallback: try to match by info
+
         if not info or not url:
             for key in list(context.user_data.keys()):
                 if key.startswith('info_'):
@@ -147,7 +241,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             url = stored_url
                             url_hash = stored_hash
                             break
-        
+
         if not info or not url:
             await query.message.reply_text("Video ma'lumotlari topilmadi. Havolani qayta yuboring.")
             return
@@ -190,7 +284,8 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         await query.message.reply_video(
                             video=f, caption=f"📁 {info['title']} ({label})", supports_streaming=True
                         )
-            except Exception:
+            except Exception as e:
+                logger.error("ytdl send error: %s", e)
                 await query.message.reply_text("Fayl juda katta yoki xatolik yuz berdi. Kichikroq formatni tanlang.")
             finally:
                 try:
@@ -206,20 +301,20 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if len(parts) < 4:
             await query.message.reply_text("Xatolik: noto'g'ri callback data.")
             return
-        
-        action = parts[1]  # 'video' or 'audio'
+
+        action = parts[1]
         platform = parts[2]
         url_hash = parts[3]
 
         try:
             await process_download(update, context, url_hash, action, None)
         except Exception as e:
-            print(f'[ERROR] process_download xatolik: {e}')
+            logger.error("process_download error: %s", e)
             await query.message.reply_text("Yuklashda xatolik yuz berdi. Qaytadan urinib ko'ring.")
         return
 
     if data.startswith("music_instagram_"):
-        parts = data.split("_", 2)  # music, instagram, hash
+        parts = data.split("_", 2)
         if len(parts) < 3:
             await query.message.reply_text("Xatolik: noto'g'ri callback data.")
             return
@@ -237,7 +332,6 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await query.message.reply_text("🎧 Musiqa qidirilmoqda (Shazam)...")
 
-        # Video faylni vaqtincha yuklab olamiz va shazam qilamiz
         tmp_name = f"insta_music_{url_hash}_{query.message.message_id}.mp4"
         tmp_path = os.path.join(DOWNLOADS_DIR, tmp_name)
 
@@ -252,7 +346,6 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             result = await shazam_service.recognize(file_path)
 
-            # Log
             tg_user = await sync_to_async(TelegramUser.objects.get)(telegram_id=query.from_user.id)
             await sync_to_async(ShazamLog.objects.create)(
                 user=tg_user,

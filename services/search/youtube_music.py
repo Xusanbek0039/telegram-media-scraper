@@ -1,47 +1,57 @@
-"""YouTube Music-ish search (implemented via YouTube search).
+"""YouTube Music search via yt-dlp.
 
-Without official YouTube Music API keys, we bias queries to return music tracks.
+Searches YouTube with music-biased queries and returns track info.
 """
 
 from __future__ import annotations
 
+import logging
 from typing import Dict, List
 
 import yt_dlp
 
+from services.downloaders.ytdl_utils import get_ydl_base_opts
+
+logger = logging.getLogger(__name__)
+
 
 def search_youtube_music(query: str, limit: int = 10) -> List[Dict]:
     """
-    Returns a list of YouTube results shaped like:
-    {id, title, duration, url}
+    Returns a list of YouTube results:
+    {id, title, duration, url, artist}
     """
     query = (query or "").strip()
     if not query:
         return []
 
-    # query variations to bias towards songs
-    candidates = [
-        query,
-        f"{query} audio",
-        f"{query} topic",
-        f"{query} official audio",
+    search_queries = [
+        f"ytsearch{limit}:{query} audio",
+        f"ytsearch{limit}:{query} official audio",
+        f"ytsearch{limit}:{query}",
+        f"ytsearch{limit}:{query} music",
+        f"ytsearch{limit}:{query} song",
     ]
 
+    base_opts = get_ydl_base_opts()
     ydl_opts = {
-        "quiet": True,
-        "no_warnings": True,
-        "extract_flat": True,
-        "default_search": f"ytsearch{limit}",
+        **base_opts,
+        "extract_flat": "in_playlist",
+        "skip_download": True,
+        "ignoreerrors": True,
     }
 
     seen = set()
     out: List[Dict] = []
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        for q in candidates:
-            try:
-                result = ydl.extract_info(q, download=False)
-                entries = result.get("entries", []) if isinstance(result, dict) else []
+    for sq in search_queries:
+        if len(out) >= limit:
+            break
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                result = ydl.extract_info(sq, download=False)
+                if not result:
+                    continue
+                entries = result.get("entries") or []
                 for entry in entries:
                     if not entry:
                         continue
@@ -49,18 +59,19 @@ def search_youtube_music(query: str, limit: int = 10) -> List[Dict]:
                     if not vid or vid in seen:
                         continue
                     seen.add(vid)
-                    out.append(
-                        {
-                            "id": vid,
-                            "title": entry.get("title", "Noma'lum"),
-                            "duration": entry.get("duration", 0),
-                            "url": f"https://www.youtube.com/watch?v={vid}",
-                        }
-                    )
+                    title = entry.get("title") or "Noma'lum"
+                    channel = entry.get("channel") or entry.get("uploader") or ""
+                    out.append({
+                        "id": vid,
+                        "title": title,
+                        "artist": channel,
+                        "duration": entry.get("duration") or 0,
+                        "url": entry.get("url") or entry.get("webpage_url") or f"https://www.youtube.com/watch?v={vid}",
+                    })
                     if len(out) >= limit:
-                        return out
-            except Exception:
-                continue
+                        break
+        except Exception as e:
+            logger.warning("YouTube search failed for %r: %s", sq, e)
+            continue
 
     return out
-
