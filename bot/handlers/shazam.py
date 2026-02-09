@@ -70,7 +70,16 @@ async def send_shazam_result(update: Update, result: dict, file_name: str, user)
             is_successful=False,
             error_message=result.get('error_message', 'Unknown error'),
         )
-        await update.message.reply_text("Qo'shiqni aniqlab bo'lmadi. Qaytadan urinib ko'ring.")
+        reason = result.get('error_message', 'Unknown error')
+        await update.message.reply_text(
+            "Qo‘shiqni aniqlab bo‘lmadi.\n\n"
+            f"Sabab: {reason}\n\n"
+            "Iltimos, quyidagilardan birini qiling (bot hech qachon to‘xtamaydi):\n"
+            "🎧 8–15 soniya ovozli xabar yuboring\n"
+            "🎬 Qo‘shiq eshitiladigan joyidan video yuboring\n"
+            "🔊 Audio fayl yuboring\n"
+            "✍️ Yoki qo‘shiq nomini yozing (artist + title)"
+        )
 
 
 async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
