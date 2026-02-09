@@ -38,3 +38,24 @@ class SearchHistory(models.Model):
 
     def __str__(self):
         return f'{self.user} - "{self.query}"'
+
+
+class DownloadHistory(models.Model):
+    user = models.ForeignKey(
+        TelegramUser,
+        on_delete=models.CASCADE,
+        related_name='downloads',
+        verbose_name='Foydalanuvchi',
+    )
+    video_url = models.URLField(max_length=500, verbose_name='Video havolasi')
+    video_title = models.CharField(max_length=500, verbose_name='Video nomi')
+    format_label = models.CharField(max_length=50, verbose_name='Format')
+    downloaded_at = models.DateTimeField(auto_now_add=True, verbose_name='Yuklangan vaqt')
+
+    class Meta:
+        verbose_name = 'Yuklash tarixi'
+        verbose_name_plural = 'Yuklash tarixi'
+        ordering = ['-downloaded_at']
+
+    def __str__(self):
+        return f'{self.user} - {self.video_title} ({self.format_label})'
