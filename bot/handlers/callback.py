@@ -109,14 +109,12 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data.startswith('page_'):
         results = context.user_data.get('results', [])
         page = int(data.split('_')[1])
-        total_pages = (len(results) + 4) // 5
-        if page < 0 or page >= total_pages:
+        if page < 0 or page * 10 >= len(results):
             return
         context.user_data['page'] = page
         text = format_results(results, page=page)
-        text += "\n\n👇 Qo'shiqni tanlang — audio yuklab beriladi"
         await query.message.edit_text(
-            text, reply_markup=build_search_keyboard(results, page=page)
+            text, reply_markup=build_search_keyboard(page=page)
         )
         return
 
