@@ -1,14 +1,21 @@
-"""Shazam audio recognition service (improved for shazamio 0.8+)"""
+"""Shazam audio recognition service (works without ffmpeg)"""
 import logging
 import os
-import tempfile
 from typing import Optional, Dict
 
-from shazamio import Shazam, Serialize, HTTPClient
+from shazamio import Shazam, HTTPClient
 from aiohttp_retry import ExponentialRetry
-from pydub import AudioSegment
 
 logger = logging.getLogger(__name__)
+
+HAS_PYDUB = False
+try:
+    from pydub import AudioSegment
+    import tempfile
+    _test = AudioSegment.silent(duration=100)
+    HAS_PYDUB = True
+except Exception:
+    pass
 
 
 class ShazamService:
@@ -28,32 +35,38 @@ class ShazamService:
             )
         return self._shazam
 
-    def _prepare_snippet(self, file_path: str) -> Optional[str]:
+    def _prepare_snippet(self, file_path: str) -> Optional[bytes]:
+        """Audio faylni bytes ga aylantiradi. ffmpeg bo'lsa snippet kesadi, bo'lmasa raw bytes."""
         if not os.path.exists(file_path):
             return None
 
-        try:
-            audio = AudioSegment.from_file(file_path)
+        if HAS_PYDUB:
+            try:
+                audio = AudioSegment.from_file(file_path)
+                duration_ms = len(audio)
+                target_ms = 12_000
 
-            duration_ms = len(audio)
-            target_ms = 12_000
+                if duration_ms > target_ms:
+                    start = max((duration_ms - target_ms) // 2, 0)
+                    audio = audio[start:start + target_ms]
 
-            if duration_ms <= target_ms:
-                snippet = audio
-            else:
-                start = max((duration_ms - target_ms) // 2, 0)
-                end = start + target_ms
-                snippet = audio[start:end]
+                audio = audio.set_channels(1).set_frame_rate(44_100).set_sample_width(2)
 
-            snippet = snippet.set_channels(1).set_frame_rate(44_100).set_sample_width(2)
+                tmp_dir = tempfile.gettempdir()
+                out_path = os.path.join(tmp_dir, f"shazam_{os.getpid()}.wav")
+                audio.export(out_path, format="wav")
+                with open(out_path, "rb") as f:
+                    data = f.read()
+                try:
+                    os.remove(out_path)
+                except OSError:
+                    pass
+                return data
+            except Exception as e:
+                logger.warning("pydub snippet failed, using raw bytes: %s", e)
 
-            tmp_dir = tempfile.gettempdir()
-            out_path = os.path.join(tmp_dir, f"shazam_snippet_{os.getpid()}_{os.path.basename(file_path)}.wav")
-            snippet.export(out_path, format="wav")
-            return out_path
-        except Exception as e:
-            logger.warning("Snippet prepare error: %s", e)
-            return file_path
+        with open(file_path, "rb") as f:
+            return f.read()
 
     async def recognize(self, file_path: str) -> Optional[Dict]:
         if not os.path.exists(file_path):
@@ -62,19 +75,15 @@ class ShazamService:
                 "error_message": "Fayl topilmadi.",
             }
 
-        snippet_path = self._prepare_snippet(file_path)
-        if not snippet_path or not os.path.exists(snippet_path):
+        audio_bytes = self._prepare_snippet(file_path)
+        if not audio_bytes:
             return {
                 "is_successful": False,
-                "error_message": "Audio snippet tayyorlab bo'lmadi. ffmpeg o'rnatilganligini tekshiring.",
+                "error_message": "Audio o'qib bo'lmadi.",
             }
 
         try:
             shazam = self._get_shazam()
-
-            with open(snippet_path, "rb") as f:
-                audio_bytes = f.read()
-
             result = await shazam.recognize(audio_bytes)
 
             track = result.get("track") if isinstance(result, dict) else None
@@ -82,15 +91,15 @@ class ShazamService:
             if not track:
                 return {
                     "is_successful": False,
-                    "error_message": "Shazam hech qanday qo'shiq topmadi. Boshqa audio yuboring.",
+                    "error_message": "Shazam qo'shiqni topa olmadi. Boshqa audio yuboring.",
                 }
 
             album = ""
             try:
                 sections = track.get("sections", [])
-                if sections and len(sections) > 0:
+                if sections:
                     metadata = sections[0].get("metadata", [])
-                    if metadata and len(metadata) > 0:
+                    if metadata:
                         album = metadata[0].get("text", "")
             except Exception:
                 pass
@@ -111,9 +120,3 @@ class ShazamService:
                 "is_successful": False,
                 "error_message": f"Shazam xatolik: {e}",
             }
-        finally:
-            if snippet_path and snippet_path != file_path:
-                try:
-                    os.remove(snippet_path)
-                except OSError:
-                    pass
