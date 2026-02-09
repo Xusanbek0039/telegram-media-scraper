@@ -3,3 +3,8 @@ python-telegram-bot>=20.0
 python-dotenv
 requests
 yt-dlp
+django-jazzmin
+shazamio
+Pillow
+aiofiles
+pydub
