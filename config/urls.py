@@ -1,5 +1,5 @@
 from django.contrib import admin
-from django.urls import path
+from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from django.shortcuts import render
@@ -67,6 +67,7 @@ def analytics_view(request):
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('admin/analytics/', analytics_view, name='admin_analytics'),
+    path('', include('dashboard.urls')),
 ]
 
 if settings.DEBUG:

@@ -20,8 +20,9 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'core',  # Core models
-    'bot',   # Bot app (legacy, kept for migrations)
+    'core',      # Core models
+    'bot',       # Bot app (legacy, kept for migrations)
+    'dashboard', # Boshqaruv paneli (Bootstrap UI)
 ]
 
 MIDDLEWARE = [
@@ -80,7 +81,7 @@ MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 LOGIN_URL = '/login/'
-LOGIN_REDIRECT_URL = '/dashboard/'
+LOGIN_REDIRECT_URL = '/boshqaruv/'
 LOGOUT_REDIRECT_URL = '/login/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
