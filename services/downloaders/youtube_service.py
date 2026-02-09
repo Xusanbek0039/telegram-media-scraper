@@ -3,6 +3,7 @@ import os
 import yt_dlp
 from typing import Optional, Dict, List
 from .base import BaseDownloader
+from .ytdl_utils import get_ydl_base_opts
 
 VIDEO_QUALITIES = ['144', '240', '360', '480', '720', '1080']
 
@@ -18,11 +19,7 @@ class YouTubeService(BaseDownloader):
         return bool(pattern.search(url))
 
     def get_info(self, url: str) -> Optional[Dict]:
-        ydl_opts = {
-            'quiet': True,
-            'no_warnings': True,
-            'noplaylist': True,
-        }
+        ydl_opts = get_ydl_base_opts()
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
@@ -79,22 +76,19 @@ class YouTubeService(BaseDownloader):
 
     def download_video(self, url: str, output_path: str, quality: Optional[str] = None) -> Optional[str]:
         video_id = url.split('v=')[-1].split('&')[0] if 'v=' in url else 'video'
+        base = get_ydl_base_opts()
         if quality and quality != 'audio':
             ydl_opts = {
+                **base,
                 'format': f'best[height<={quality}][ext=mp4]/best[height<={quality}]/best',
                 'outtmpl': output_path.replace('.mp4', '.%(ext)s'),
-                'quiet': True,
-                'no_warnings': True,
-                'noplaylist': True,
                 'merge_output_format': 'mp4',
             }
         else:
             ydl_opts = {
+                **base,
                 'format': 'best[ext=mp4]/best',
                 'outtmpl': output_path.replace('.mp4', '.%(ext)s'),
-                'quiet': True,
-                'no_warnings': True,
-                'noplaylist': True,
                 'merge_output_format': 'mp4',
             }
 
@@ -113,6 +107,7 @@ class YouTubeService(BaseDownloader):
 
     def download_audio(self, url: str, output_path: str) -> Optional[str]:
         ydl_opts = {
+            **get_ydl_base_opts(),
             'format': 'bestaudio/best',
             'outtmpl': output_path.replace('.mp3', '.%(ext)s'),
             'postprocessors': [{
@@ -120,9 +115,6 @@ class YouTubeService(BaseDownloader):
                 'preferredcodec': 'mp3',
                 'preferredquality': '192',
             }],
-            'quiet': True,
-            'no_warnings': True,
-            'noplaylist': True,
         }
 
         try:
