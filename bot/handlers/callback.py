@@ -27,8 +27,17 @@ async def _download_youtube_audio(url: str, video_id: str) -> str | None:
     import yt_dlp
 
     output_path = os.path.join(DOWNLOADS_DIR, f'{video_id}_audio')
+
+    for old in [f'{output_path}.{e}' for e in ['mp3','m4a','webm','ogg','opus','wav']]:
+        try:
+            if os.path.exists(old):
+                os.remove(old)
+        except OSError:
+            pass
+
     base_opts = get_ydl_base_opts()
 
+    # 1-usul: ffmpeg bilan mp3 ga convert
     ydl_opts = {
         **base_opts,
         'format': 'bestaudio/best',
@@ -47,25 +56,61 @@ async def _download_youtube_audio(url: str, video_id: str) -> str | None:
 
         await asyncio.to_thread(_do_download)
     except Exception as e:
-        logger.error("Audio download error (with ffmpeg): %s", e)
-        ydl_opts_fallback = {
-            **base_opts,
-            'format': 'bestaudio/best',
-            'outtmpl': f'{output_path}.%(ext)s',
-        }
-        try:
-            def _do_fallback():
-                with yt_dlp.YoutubeDL(ydl_opts_fallback) as ydl:
-                    ydl.download([url])
-            await asyncio.to_thread(_do_fallback)
-        except Exception as e2:
-            logger.error("Audio fallback download error: %s", e2)
-            return None
+        logger.error("Audio download (ffmpeg) xato: %s", e)
 
+    # Tekshir — fayl bormi
     for ext in ['mp3', 'm4a', 'webm', 'ogg', 'opus', 'wav']:
         p = f'{output_path}.{ext}'
-        if os.path.exists(p):
+        if os.path.exists(p) and os.path.getsize(p) > 0:
+            logger.info("Audio topildi (1-usul): %s [%d bytes]", p, os.path.getsize(p))
             return p
+
+    # 2-usul: ffmpeg'siz — raw audio formatda
+    logger.warning("1-usul ishlamadi, 2-usul (ffmpeg'siz) boshlanmoqda: %s", url)
+    ydl_opts_fallback = {
+        **base_opts,
+        'format': 'bestaudio/best',
+        'outtmpl': f'{output_path}.%(ext)s',
+    }
+
+    try:
+        def _do_fallback():
+            with yt_dlp.YoutubeDL(ydl_opts_fallback) as ydl:
+                ydl.download([url])
+        await asyncio.to_thread(_do_fallback)
+    except Exception as e2:
+        logger.error("Audio fallback xato: %s", e2)
+
+    for ext in ['mp3', 'm4a', 'webm', 'ogg', 'opus', 'wav', 'mp4']:
+        p = f'{output_path}.{ext}'
+        if os.path.exists(p) and os.path.getsize(p) > 0:
+            logger.info("Audio topildi (2-usul): %s [%d bytes]", p, os.path.getsize(p))
+            return p
+
+    # 3-usul: format=worstaudio (eng kichik fayl)
+    logger.warning("2-usul ham ishlamadi, 3-usul boshlanmoqda: %s", url)
+    ydl_opts_last = {
+        **base_opts,
+        'format': 'worstaudio/worst',
+        'outtmpl': f'{output_path}.%(ext)s',
+    }
+
+    try:
+        def _do_last():
+            with yt_dlp.YoutubeDL(ydl_opts_last) as ydl:
+                ydl.download([url])
+        await asyncio.to_thread(_do_last)
+    except Exception as e3:
+        logger.error("Audio 3-usul xato: %s", e3)
+        return None
+
+    for ext in ['mp3', 'm4a', 'webm', 'ogg', 'opus', 'wav', 'mp4']:
+        p = f'{output_path}.{ext}'
+        if os.path.exists(p) and os.path.getsize(p) > 0:
+            logger.info("Audio topildi (3-usul): %s [%d bytes]", p, os.path.getsize(p))
+            return p
+
+    logger.error("Hech qanday usul ishlamadi: %s", url)
     return None
 
 
@@ -198,12 +243,10 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await status_msg.delete()
             except Exception:
                 pass
+            logger.error("Audio yuklab bo'lmadi — fayl topilmadi: url=%s video_id=%s", url, video_id)
             await query.message.reply_text(
                 f"❌ \"{title}\" yuklab bo'lmadi.\n\n"
-                "💡 Sabablar:\n"
-                "• ffmpeg o'rnatilmagan bo'lishi mumkin\n"
-                "• Video cheklangan bo'lishi mumkin\n\n"
-                "Boshqa qo'shiqni tanlang yoki qaytadan qidiring."
+                "💡 Qaytadan urinib ko'ring yoki boshqa qo'shiqni tanlang."
             )
         return
 

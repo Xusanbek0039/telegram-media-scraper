@@ -131,8 +131,7 @@ async def _send_instagram_direct(update: Update, context: ContextTypes.DEFAULT_T
 
         msg = (
             f"{platform_name} dan video yuklab bo'lmadi.\n\n"
-            "Ko'p hollarda bu **ffmpeg** o'rnatilmaganligi sababli bo'ladi (video+audio merge uchun).\n"
-            "Windows: `C:\\ffmpeg\\bin` ni PATH ga qo'shing yoki `.env` ga `FFMPEG_PATH=C:\\ffmpeg\\bin\\ffmpeg.exe` yozing."
+            "Qaytadan urinib ko'ring yoki boshqa havolani yuboring."
         )
         await update.message.reply_text(msg)
         return
