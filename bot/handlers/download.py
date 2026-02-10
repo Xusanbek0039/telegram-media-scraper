@@ -70,14 +70,17 @@ def _ffmpeg_available() -> bool:
     """
     if shutil.which("ffmpeg") and shutil.which("ffprobe"):
         return True
-    # .env orqali berilgan holat (FFMPEG_PATH exe yoki papka bo'lishi mumkin)
-    p = os.getenv("FFMPEG_PATH", "").strip()
+    # .env orqali berilgan holat (FFMPEG_PATH papka bo'lishi mumkin)
+    p = os.getenv("FFMPEG_PATH", "/home/adminmas/django-botv1/bot").strip()
     if not p:
         return False
     if os.path.isfile(p) and os.path.basename(p).lower().startswith("ffmpeg"):
         return True
-    if os.path.isdir(p) and os.path.isfile(os.path.join(p, "ffmpeg.exe")):
-        return True
+    if os.path.isdir(p):
+        if os.path.isfile(os.path.join(p, "ffmpeg")):
+            return True
+        if os.path.isfile(os.path.join(p, "ffmpeg.exe")):
+            return True
     return False
 
 
