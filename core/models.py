@@ -178,3 +178,99 @@ class BotSettings(models.Model):
     def get_settings(cls):
         settings, _ = cls.objects.get_or_create(pk=1)
         return settings
+
+
+class AdCampaign(models.Model):
+    TARGET_AUDIENCE_CHOICES = [
+        ('all', 'Hammasi'),
+        ('premium', 'Premium'),
+        ('free', 'Bepul'),
+    ]
+    STATUS_CHOICES = [
+        ('draft', 'Qoralama'),
+        ('scheduled', 'Rejalashtirilgan'),
+        ('sending', 'Yuborilmoqda'),
+        ('sent', 'Yuborildi'),
+        ('failed', 'Xatolik'),
+    ]
+
+    name = models.CharField(max_length=255, verbose_name='Kampaniya nomi')
+    message = models.TextField(verbose_name='Xabar matni')
+    photo = models.ImageField(upload_to='campaigns/', blank=True, null=True, verbose_name='Rasm')
+    button_text = models.CharField(max_length=100, blank=True, verbose_name='Tugma matni')
+    button_url = models.URLField(blank=True, verbose_name='Tugma havolasi')
+    target_audience = models.CharField(max_length=10, choices=TARGET_AUDIENCE_CHOICES, default='all', verbose_name='Maqsadli auditoriya')
+    scheduled_at = models.DateTimeField(null=True, blank=True, verbose_name='Rejalashtirish vaqti')
+    is_active = models.BooleanField(default=True, verbose_name='Faolmi')
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='draft')
+    sent_count = models.PositiveIntegerField(default=0)
+    failed_count = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Reklama kampaniyasi'
+        verbose_name_plural = 'Reklama kampaniyalari'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return self.name
+
+
+class PremiumPlan(models.Model):
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    duration_days = models.PositiveIntegerField(verbose_name='Muddat (kun)')
+    daily_download_limit = models.PositiveIntegerField(default=100)
+    daily_shazam_limit = models.PositiveIntegerField(default=50)
+    max_file_size_mb = models.PositiveIntegerField(default=100)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Premium reja'
+        verbose_name_plural = 'Premium rejalar'
+
+    def __str__(self):
+        return self.name
+
+
+class ReferralStats(models.Model):
+    referrer = models.ForeignKey(TelegramUser, on_delete=models.CASCADE, related_name='referrals_made')
+    referred_user = models.ForeignKey(TelegramUser, on_delete=models.CASCADE, related_name='referred_by_user')
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_rewarded = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = 'Referal statistikasi'
+        verbose_name_plural = 'Referal statistikalari'
+        unique_together = [('referrer', 'referred_user')]
+
+    def __str__(self):
+        return f'{self.referrer} -> {self.referred_user}'
+
+
+class ErrorLog(models.Model):
+    ERROR_TYPE_CHOICES = [
+        ('api_error', 'API xatolik'),
+        ('download_error', 'Yuklash xatoligi'),
+        ('shazam_error', 'Shazam xatoligi'),
+        ('webhook_error', 'Webhook xatoligi'),
+        ('system_error', 'Tizim xatoligi'),
+    ]
+
+    error_type = models.CharField(max_length=20, choices=ERROR_TYPE_CHOICES)
+    message = models.TextField()
+    traceback = models.TextField(blank=True)
+    user = models.ForeignKey(TelegramUser, null=True, blank=True, on_delete=models.SET_NULL)
+    url = models.URLField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_resolved = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = 'Xatolik logi'
+        verbose_name_plural = 'Xatolik loglari'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.get_error_type_display()} - {self.created_at}'
