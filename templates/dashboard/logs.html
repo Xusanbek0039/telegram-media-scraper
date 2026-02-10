@@ -1,0 +1,157 @@
+{% extends 'dashboard/base.html' %}
+{% block title %}Logs & Monitoring — Bot boshqaruvi{% endblock %}
+{% block content %}
+<div class="mb-4">
+    <h1 class="page-title">Logs & Monitoring</h1>
+    <p class="page-subtitle mb-0">Xatolar, API loglar va monitoring</p>
+</div>
+
+<!-- Stats -->
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="glass-card p-3 text-center">
+            <div class="stat-value counter-animate" style="color:var(--accent-red);">{{ today_download_errors }}</div>
+            <div class="stat-label">Bugungi yuklash xatolari</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="glass-card p-3 text-center">
+            <div class="stat-value counter-animate" style="color:var(--accent-orange);">{{ today_shazam_fails }}</div>
+            <div class="stat-label">Bugungi Shazam xatolari</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="glass-card p-3 text-center">
+            <div class="stat-value counter-animate" style="color:var(--accent-purple);">{{ today_system_errors }}</div>
+            <div class="stat-label">Tizim xatolari</div>
+        </div>
+    </div>
+</div>
+
+<!-- Tabs -->
+<ul class="nav nav-pills mb-4 gap-2">
+    <li class="nav-item">
+        <a class="btn btn-sm {% if log_type == 'all' %}btn-accent{% else %}btn-glass{% endif %}" href="?type=all">Barchasi</a>
+    </li>
+    <li class="nav-item">
+        <a class="btn btn-sm {% if log_type == 'download_error' %}btn-accent{% else %}btn-glass{% endif %}" href="?type=download_error">Yuklash xatolari</a>
+    </li>
+    <li class="nav-item">
+        <a class="btn btn-sm {% if log_type == 'shazam_error' %}btn-accent{% else %}btn-glass{% endif %}" href="?type=shazam_error">Shazam</a>
+    </li>
+    <li class="nav-item">
+        <a class="btn btn-sm {% if log_type == 'api_error' %}btn-accent{% else %}btn-glass{% endif %}" href="?type=api_error">API</a>
+    </li>
+    <li class="nav-item">
+        <a class="btn btn-sm {% if log_type == 'system_error' %}btn-accent{% else %}btn-glass{% endif %}" href="?type=system_error">Tizim</a>
+    </li>
+</ul>
+
+<!-- Download Errors -->
+<div class="glass-card mb-4">
+    <div class="card-header">
+        <h6 class="mb-0"><i class="bi bi-cloud-download" style="color:var(--accent-red);"></i> Yuklash xatolari</h6>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-dark-custom mb-0">
+                <thead>
+                    <tr>
+                        <th>Foydalanuvchi</th>
+                        <th>Video</th>
+                        <th>Platforma</th>
+                        <th>Xatolik</th>
+                        <th>Vaqt</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for d in download_errors %}
+                    <tr>
+                        <td><a href="{% url 'dashboard:user_detail' d.user.pk %}" class="text-decoration-none" style="color:var(--accent-blue);">{{ d.user }}</a></td>
+                        <td class="link-cell"><a href="{{ d.video_url }}" target="_blank" style="color:var(--text-secondary);">{{ d.video_title|truncatewords:4 }}</a></td>
+                        <td><span class="badge badge-glow badge-info">{{ d.get_platform_display }}</span></td>
+                        <td><small style="color:var(--accent-red);">{{ d.error_message|default:"Nomaʻlum xato"|truncatewords:8 }}</small></td>
+                        <td><small class="text-muted">{{ d.downloaded_at|date:"d.m H:i" }}</small></td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="5" class="text-center text-muted py-3">Yuklash xatolari yoʻq</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Shazam Fails -->
+<div class="glass-card mb-4">
+    <div class="card-header">
+        <h6 class="mb-0"><i class="bi bi-music-note" style="color:var(--accent-orange);"></i> Shazam aniqlanmadi</h6>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-dark-custom mb-0">
+                <thead>
+                    <tr>
+                        <th>Foydalanuvchi</th>
+                        <th>Audio fayl</th>
+                        <th>Xatolik</th>
+                        <th>Vaqt</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in shazam_fails %}
+                    <tr>
+                        <td><a href="{% url 'dashboard:user_detail' s.user.pk %}" class="text-decoration-none" style="color:var(--accent-blue);">{{ s.user }}</a></td>
+                        <td><small class="text-muted">{{ s.audio_file_name|truncatewords:3 }}</small></td>
+                        <td><small style="color:var(--accent-orange);">{{ s.error_message|default:"Aniqlanmadi"|truncatewords:8 }}</small></td>
+                        <td><small class="text-muted">{{ s.recognized_at|date:"d.m H:i" }}</small></td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="4" class="text-center text-muted py-3">Shazam xatolari yoʻq</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- System Error Logs -->
+{% if error_log_exists %}
+<div class="glass-card">
+    <div class="card-header">
+        <h6 class="mb-0"><i class="bi bi-terminal-fill" style="color:var(--accent-purple);"></i> Tizim xatolari</h6>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-dark-custom mb-0">
+                <thead>
+                    <tr>
+                        <th>Turi</th>
+                        <th>Xabar</th>
+                        <th>User</th>
+                        <th>Holat</th>
+                        <th>Vaqt</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for e in error_logs %}
+                    <tr>
+                        <td><span class="badge badge-glow badge-danger">{{ e.get_error_type_display }}</span></td>
+                        <td><small style="color:var(--text-secondary);">{{ e.message|truncatewords:10 }}</small></td>
+                        <td>{% if e.user %}<a href="{% url 'dashboard:user_detail' e.user.pk %}" style="color:var(--accent-blue);">{{ e.user }}</a>{% else %}—{% endif %}</td>
+                        <td>
+                            {% if e.is_resolved %}<span class="badge badge-glow badge-success">Hal qilindi</span>
+                            {% else %}<span class="badge badge-glow badge-danger">Ochiq</span>{% endif %}
+                        </td>
+                        <td><small class="text-muted">{{ e.created_at|date:"d.m H:i" }}</small></td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="5" class="text-center text-muted py-3">Tizim xatolari yoʻq</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

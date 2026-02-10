@@ -1,90 +1,267 @@
 {% extends 'dashboard/base.html' %}
-{% block title %}Bosh sahifa — Bot boshqaruvi{% endblock %}
+{% block title %}Dashboard — Bot boshqaruvi{% endblock %}
 {% block content %}
-<h1 class="h4 mb-4">Bosh sahifa</h1>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="page-title">Dashboard</h1>
+        <p class="page-subtitle mb-0">Umumiy statistika va monitoring</p>
+    </div>
+    <div class="d-flex gap-2">
+        <span class="badge badge-glow badge-success" id="live-indicator">
+            <i class="bi bi-circle-fill" style="font-size:0.5rem;"></i> Live
+        </span>
+    </div>
+</div>
+
+<!-- STAT CARDS -->
 <div class="row g-3 mb-4">
-    <div class="col-md-4">
-        <div class="card stat-card h-100">
-            <div class="card-body d-flex align-items-center">
-                <div class="rounded-3 bg-primary bg-opacity-10 p-3 me-3">
-                    <i class="bi bi-people text-primary" style="font-size: 2rem;"></i>
+    <div class="col-xl-2 col-md-4 col-6">
+        <div class="glass-card stat-card p-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="stat-icon" style="background:rgba(59,130,246,0.15);color:var(--accent-blue);">
+                    <i class="bi bi-people-fill"></i>
                 </div>
                 <div>
-                    <div class="text-muted small">Foydalanuvchilar</div>
-                    <div class="h4 mb-0">{{ total_users }}</div>
+                    <div class="stat-value counter-animate" data-target="{{ total_users }}">{{ total_users }}</div>
+                    <div class="stat-label">Jami userlar</div>
+                </div>
+            </div>
+            <div class="stat-change text-success mt-2"><i class="bi bi-arrow-up"></i> +{{ today_users }} bugun</div>
+        </div>
+    </div>
+    <div class="col-xl-2 col-md-4 col-6">
+        <div class="glass-card stat-card p-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="stat-icon" style="background:rgba(16,185,129,0.15);color:var(--accent-green);">
+                    <i class="bi bi-person-check-fill"></i>
+                </div>
+                <div>
+                    <div class="stat-value counter-animate" data-target="{{ active_users }}">{{ active_users }}</div>
+                    <div class="stat-label">Aktiv (24s)</div>
                 </div>
             </div>
         </div>
     </div>
-    <div class="col-md-4">
-        <div class="card stat-card h-100">
-            <div class="card-body d-flex align-items-center">
-                <div class="rounded-3 bg-success bg-opacity-10 p-3 me-3">
-                    <i class="bi bi-download text-success" style="font-size: 2rem;"></i>
+    <div class="col-xl-2 col-md-4 col-6">
+        <div class="glass-card stat-card p-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="stat-icon" style="background:rgba(139,92,246,0.15);color:var(--accent-purple);">
+                    <i class="bi bi-download"></i>
                 </div>
                 <div>
-                    <div class="text-muted small">Yuklashlar</div>
-                    <div class="h4 mb-0">{{ total_downloads }}</div>
+                    <div class="stat-value counter-animate" data-target="{{ today_downloads }}">{{ today_downloads }}</div>
+                    <div class="stat-label">Bugungi yuklash</div>
+                </div>
+            </div>
+            <div class="stat-change text-secondary mt-2">Jami: {{ total_downloads }}</div>
+        </div>
+    </div>
+    <div class="col-xl-2 col-md-4 col-6">
+        <div class="glass-card stat-card p-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="stat-icon" style="background:rgba(6,182,212,0.15);color:var(--accent-cyan);">
+                    <i class="bi bi-music-note-beamed"></i>
+                </div>
+                <div>
+                    <div class="stat-value counter-animate" data-target="{{ today_shazam }}">{{ today_shazam }}</div>
+                    <div class="stat-label">Bugungi Shazam</div>
+                </div>
+            </div>
+            <div class="stat-change text-secondary mt-2">Jami: {{ total_shazam }}</div>
+        </div>
+    </div>
+    <div class="col-xl-2 col-md-4 col-6">
+        <div class="glass-card stat-card p-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="stat-icon" style="background:rgba(245,158,11,0.15);color:var(--accent-orange);">
+                    <i class="bi bi-gem"></i>
+                </div>
+                <div>
+                    <div class="stat-value counter-animate" data-target="{{ premium_users }}">{{ premium_users }}</div>
+                    <div class="stat-label">Premium</div>
                 </div>
             </div>
         </div>
     </div>
-    <div class="col-md-4">
-        <div class="card stat-card h-100">
-            <div class="card-body d-flex align-items-center">
-                <div class="rounded-3 bg-info bg-opacity-10 p-3 me-3">
-                    <i class="bi bi-music-note-beamed text-info" style="font-size: 2rem;"></i>
+    <div class="col-xl-2 col-md-4 col-6">
+        <div class="glass-card stat-card p-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="stat-icon" style="background:rgba(239,68,68,0.15);color:var(--accent-red);">
+                    <i class="bi bi-exclamation-triangle-fill"></i>
                 </div>
                 <div>
-                    <div class="text-muted small">Shazam</div>
-                    <div class="h4 mb-0">{{ total_shazam }}</div>
+                    <div class="stat-value counter-animate" data-target="{{ today_errors }}">{{ today_errors }}</div>
+                    <div class="stat-label">Xatolar bugun</div>
                 </div>
             </div>
         </div>
     </div>
 </div>
 
-<div class="card">
-    <div class="card-header bg-white d-flex justify-content-between align-items-center">
-        <h5 class="mb-0">Oxirgi yuklashlar</h5>
-        <a href="{% url 'dashboard:history' %}" class="btn btn-sm btn-outline-primary">Barcha tarix</a>
+<!-- CHARTS ROW -->
+<div class="row g-3 mb-4">
+    <div class="col-lg-8">
+        <div class="glass-card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h6 class="mb-0"><i class="bi bi-graph-up"></i> Kunlik trafik (14 kun)</h6>
+            </div>
+            <div class="card-body">
+                <canvas id="trafficChart" height="85"></canvas>
+            </div>
+        </div>
     </div>
-    <div class="card-body p-0">
-        <div class="table-responsive">
-            <table class="table table-hover mb-0">
-                <thead class="table-light">
-                    <tr>
-                        <th>Foydalanuvchi</th>
-                        <th>Video / Havola</th>
-                        <th>Platforma</th>
-                        <th>Holat</th>
-                        <th>Vaqt</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for d in recent_downloads %}
-                    <tr>
-                        <td>
-                            <a href="{% url 'dashboard:user_detail' d.user.pk %}">{{ d.user }}</a>
-                            <br><small class="text-muted">ID: {{ d.user.telegram_id }}</small>
-                        </td>
-                        <td class="link-cell" title="{{ d.video_url }}">
-                            <a href="{{ d.video_url }}" target="_blank" rel="noopener">{{ d.video_title|truncatewords:6 }}</a>
-                        </td>
-                        <td><span class="badge platform-badge bg-secondary">{{ d.get_platform_display }}</span></td>
-                        <td>
-                            {% if d.status == 'completed' %}<span class="badge bg-success">Yakunlandi</span>
-                            {% elif d.status == 'failed' %}<span class="badge bg-danger">Xatolik</span>
-                            {% else %}<span class="badge bg-warning text-dark">{{ d.get_status_display }}</span>{% endif %}
-                        </td>
-                        <td><small>{{ d.downloaded_at|date:"d.m.Y H:i" }}</small></td>
-                    </tr>
-                    {% empty %}
-                    <tr><td colspan="5" class="text-center text-muted py-4">Hali yuklashlar yoʻq</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+    <div class="col-lg-4">
+        <div class="glass-card">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="bi bi-pie-chart-fill"></i> Platformalar</h6>
+            </div>
+            <div class="card-body d-flex justify-content-center">
+                <canvas id="platformChart" height="180" style="max-width:280px;"></canvas>
+            </div>
         </div>
     </div>
 </div>
+
+<!-- FEATURES & RECENT -->
+<div class="row g-3">
+    <div class="col-lg-4">
+        <div class="glass-card">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="bi bi-bar-chart-fill"></i> Eng ko'p ishlatilgan</h6>
+            </div>
+            <div class="card-body">
+                {% for f in features %}
+                <div class="d-flex justify-content-between align-items-center {% if not forloop.last %}mb-3{% endif %}">
+                    <span>{{ f.name }}</span>
+                    <span class="badge badge-glow badge-primary">{{ f.count }}</span>
+                </div>
+                {% if not forloop.last %}
+                <div class="progress mb-2" style="height:4px;background:rgba(255,255,255,0.05);">
+                    <div class="progress-bar" style="width:{% widthratio f.count features.0.count 100 %}%;background:linear-gradient(90deg,var(--accent-blue),var(--accent-purple));"></div>
+                </div>
+                {% else %}
+                <div class="progress" style="height:4px;background:rgba(255,255,255,0.05);">
+                    <div class="progress-bar" style="width:{% widthratio f.count features.0.count 100 %}%;background:linear-gradient(90deg,var(--accent-blue),var(--accent-purple));"></div>
+                </div>
+                {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-8">
+        <div class="glass-card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h6 class="mb-0"><i class="bi bi-clock-history"></i> Oxirgi yuklashlar</h6>
+                <a href="{% url 'dashboard:media' %}" class="btn btn-glass btn-sm">Barchasi</a>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-dark-custom mb-0">
+                        <thead>
+                            <tr>
+                                <th>Foydalanuvchi</th>
+                                <th>Video</th>
+                                <th>Platforma</th>
+                                <th>Holat</th>
+                                <th>Vaqt</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for d in recent_downloads %}
+                            <tr>
+                                <td>
+                                    <a href="{% url 'dashboard:user_detail' d.user.pk %}" class="text-decoration-none" style="color:var(--accent-blue);">{{ d.user }}</a>
+                                </td>
+                                <td class="link-cell">
+                                    <a href="{{ d.video_url }}" target="_blank" rel="noopener" style="color:var(--text-secondary);">{{ d.video_title|truncatewords:5 }}</a>
+                                </td>
+                                <td><span class="badge badge-glow badge-info">{{ d.get_platform_display }}</span></td>
+                                <td>
+                                    {% if d.status == 'completed' %}<span class="badge badge-glow badge-success">OK</span>
+                                    {% elif d.status == 'failed' %}<span class="badge badge-glow badge-danger">Xato</span>
+                                    {% else %}<span class="badge badge-glow badge-warning">{{ d.get_status_display }}</span>{% endif %}
+                                </td>
+                                <td><small class="text-muted">{{ d.downloaded_at|date:"d.m H:i" }}</small></td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="5" class="text-center text-muted py-4">Hali yuklashlar yoʻq</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var dailyData = {{ daily_data|safe }};
+    var platformData = {{ platform_stats|safe }};
+
+    // Line chart
+    new Chart(document.getElementById('trafficChart'), {
+        type: 'line',
+        data: {
+            labels: dailyData.map(d => d.date),
+            datasets: [
+                {
+                    label: 'Yuklashlar',
+                    data: dailyData.map(d => d.downloads),
+                    borderColor: '#3b82f6',
+                    backgroundColor: 'rgba(59,130,246,0.1)',
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 3,
+                    pointBackgroundColor: '#3b82f6',
+                },
+                {
+                    label: 'Yangi userlar',
+                    data: dailyData.map(d => d.users),
+                    borderColor: '#10b981',
+                    backgroundColor: 'rgba(16,185,129,0.1)',
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 3,
+                    pointBackgroundColor: '#10b981',
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { labels: { color: '#94a3b8', font: { size: 12 } } },
+            },
+            scales: {
+                x: { ticks: { color: '#64748b' }, grid: { color: 'rgba(255,255,255,0.04)' } },
+                y: { ticks: { color: '#64748b' }, grid: { color: 'rgba(255,255,255,0.04)' }, beginAtZero: true },
+            }
+        }
+    });
+
+    // Pie chart
+    var colors = ['#3b82f6','#10b981','#8b5cf6','#f59e0b','#ef4444','#06b6d4'];
+    new Chart(document.getElementById('platformChart'), {
+        type: 'doughnut',
+        data: {
+            labels: platformData.map(p => p.platform),
+            datasets: [{
+                data: platformData.map(p => p.count),
+                backgroundColor: colors.slice(0, platformData.length),
+                borderWidth: 0,
+                hoverOffset: 6,
+            }]
+        },
+        options: {
+            responsive: true,
+            cutout: '65%',
+            plugins: {
+                legend: { position: 'bottom', labels: { color: '#94a3b8', padding: 12, font: { size: 11 } } },
+            }
+        }
+    });
+});
+</script>
 {% endblock %}

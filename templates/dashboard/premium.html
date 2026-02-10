@@ -1,0 +1,135 @@
+{% extends 'dashboard/base.html' %}
+{% block title %}Premium & Monetization — Bot boshqaruvi{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="page-title">Premium & Monetization</h1>
+        <p class="page-subtitle mb-0">Tarif rejalar, limitlar va referral statistikasi</p>
+    </div>
+    <button class="btn btn-accent" data-bs-toggle="modal" data-bs-target="#newPlanModal">
+        <i class="bi bi-plus-lg"></i> Yangi tarif
+    </button>
+</div>
+
+<!-- Stats -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="glass-card p-3 text-center">
+            <div class="stat-value counter-animate" style="color:var(--accent-orange);">{{ premium_users }}</div>
+            <div class="stat-label">Premium foydalanuvchilar</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="glass-card p-3 text-center">
+            <div class="stat-value counter-animate" style="color:var(--accent-blue);">{{ free_users }}</div>
+            <div class="stat-label">Bepul foydalanuvchilar</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="glass-card p-3 text-center">
+            <div class="stat-value counter-animate" style="color:var(--accent-purple);">{{ total_referrals }}</div>
+            <div class="stat-label">Jami referrallar</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="glass-card p-3 text-center">
+            <div class="stat-value counter-animate" style="color:var(--accent-green);">{{ rewarded_referrals }}</div>
+            <div class="stat-label">Mukofotlangan</div>
+        </div>
+    </div>
+</div>
+
+<!-- Plans -->
+<div class="row g-3">
+    {% for plan in plans %}
+    <div class="col-lg-4 col-md-6">
+        <div class="glass-card {% if not plan.is_active %}opacity-50{% endif %}">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h6 class="mb-0">
+                    {% if plan.is_active %}<i class="bi bi-gem" style="color:var(--accent-orange);"></i>{% else %}<i class="bi bi-pause-circle text-muted"></i>{% endif %}
+                    {{ plan.name }}
+                </h6>
+                <form method="post" class="d-inline">{% csrf_token %}
+                    <input type="hidden" name="action" value="delete">
+                    <input type="hidden" name="plan_id" value="{{ plan.pk }}">
+                    <button class="btn btn-sm btn-glass" style="color:var(--accent-red);"><i class="bi bi-trash"></i></button>
+                </form>
+            </div>
+            <div class="card-body">
+                <div class="text-center mb-3">
+                    <div style="font-size:2rem;font-weight:700;color:var(--accent-green);">{{ plan.price }} soʻm</div>
+                    <div class="text-muted small">{{ plan.duration_days }} kun</div>
+                </div>
+                <ul class="list-unstyled small" style="color:var(--text-secondary);">
+                    <li class="mb-1"><i class="bi bi-check-circle" style="color:var(--accent-green);"></i> Kunlik yuklash: {{ plan.daily_download_limit }}</li>
+                    <li class="mb-1"><i class="bi bi-check-circle" style="color:var(--accent-green);"></i> Kunlik Shazam: {{ plan.daily_shazam_limit }}</li>
+                    <li class="mb-1"><i class="bi bi-check-circle" style="color:var(--accent-green);"></i> Maks fayl: {{ plan.max_file_size_mb }} MB</li>
+                </ul>
+                {% if plan.description %}<p class="small text-muted mt-2">{{ plan.description }}</p>{% endif %}
+            </div>
+        </div>
+    </div>
+    {% empty %}
+    <div class="col-12">
+        <div class="glass-card">
+            <div class="card-body text-center text-muted py-5">
+                <i class="bi bi-gem" style="font-size:3rem;"></i>
+                <p class="mt-2">Hali tarif rejalar yoʻq</p>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- New Plan Modal -->
+<div class="modal fade" id="newPlanModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content" style="background:var(--bg-secondary);border:1px solid var(--border-glass);">
+            <div class="modal-header" style="border-color:var(--border-glass);">
+                <h5 class="modal-title">Yangi tarif reja</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="create">
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Tarif nomi</label>
+                            <input type="text" name="name" class="form-control" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Narxi (soʻm)</label>
+                            <input type="number" name="price" class="form-control" step="0.01" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Muddat (kun)</label>
+                            <input type="number" name="duration_days" class="form-control" value="30" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Maks fayl (MB)</label>
+                            <input type="number" name="max_file_size_mb" class="form-control" value="100">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Kunlik yuklash limiti</label>
+                            <input type="number" name="daily_download_limit" class="form-control" value="100">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Kunlik Shazam limiti</label>
+                            <input type="number" name="daily_shazam_limit" class="form-control" value="50">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Tavsif</label>
+                            <textarea name="description" class="form-control" rows="2"></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer" style="border-color:var(--border-glass);">
+                    <button type="button" class="btn btn-glass" data-bs-dismiss="modal">Bekor qilish</button>
+                    <button type="submit" class="btn btn-accent"><i class="bi bi-check-lg"></i> Yaratish</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

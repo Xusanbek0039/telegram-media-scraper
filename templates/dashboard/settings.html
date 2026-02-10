@@ -1,0 +1,148 @@
+{% extends 'dashboard/base.html' %}
+{% block title %}Sozlamalar — Bot boshqaruvi{% endblock %}
+{% block content %}
+<div class="mb-4">
+    <h1 class="page-title">Bot sozlamalari</h1>
+    <p class="page-subtitle mb-0">Botni real vaqtda boshqarish</p>
+</div>
+
+<div class="row g-4">
+    <!-- General Settings -->
+    <div class="col-lg-6">
+        <div class="glass-card">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="bi bi-gear-fill" style="color:var(--accent-blue);"></i> Umumiy sozlamalar</h6>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="section" value="general">
+                    <div class="mb-3 d-flex justify-content-between align-items-center">
+                        <label class="form-label mb-0">Bot faolmi</label>
+                        <div class="form-check form-switch">
+                            <input type="checkbox" name="is_bot_enabled" class="form-check-input" {% if bot_settings.is_bot_enabled %}checked{% endif %}>
+                        </div>
+                    </div>
+                    <div class="mb-3 d-flex justify-content-between align-items-center">
+                        <label class="form-label mb-0">Texnik xizmat rejimi</label>
+                        <div class="form-check form-switch">
+                            <input type="checkbox" name="is_maintenance_mode" class="form-check-input" {% if bot_settings.is_maintenance_mode %}checked{% endif %}>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Rate limit (har minutda)</label>
+                        <input type="number" name="rate_limit_per_minute" class="form-control" value="{{ bot_settings.rate_limit_per_minute }}">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Maks fayl hajmi (MB)</label>
+                        <input type="number" name="max_file_size_mb" class="form-control" value="{{ bot_settings.max_file_size_mb }}">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Texnik xizmat xabari</label>
+                        <textarea name="maintenance_message" class="form-control" rows="2">{{ bot_settings.maintenance_message }}</textarea>
+                    </div>
+                    <button type="submit" class="btn btn-accent w-100"><i class="bi bi-check-lg"></i> Saqlash</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Downloader Settings -->
+    <div class="col-lg-6">
+        <div class="glass-card">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="bi bi-cloud-download" style="color:var(--accent-purple);"></i> Downloader sozlamalari</h6>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="section" value="downloader">
+                    <div class="mb-3 d-flex justify-content-between align-items-center">
+                        <label class="form-label mb-0"><i class="bi bi-youtube" style="color:#ff0000;"></i> YouTube</label>
+                        <div class="form-check form-switch">
+                            <input type="checkbox" name="youtube_enabled" class="form-check-input" {% if bot_settings.youtube_enabled %}checked{% endif %}>
+                        </div>
+                    </div>
+                    <div class="mb-3 d-flex justify-content-between align-items-center">
+                        <label class="form-label mb-0"><i class="bi bi-instagram" style="color:#e4405f;"></i> Instagram</label>
+                        <div class="form-check form-switch">
+                            <input type="checkbox" name="instagram_enabled" class="form-check-input" {% if bot_settings.instagram_enabled %}checked{% endif %}>
+                        </div>
+                    </div>
+                    <div class="mb-3 d-flex justify-content-between align-items-center">
+                        <label class="form-label mb-0"><i class="bi bi-tiktok"></i> TikTok</label>
+                        <div class="form-check form-switch">
+                            <input type="checkbox" name="tiktok_enabled" class="form-check-input" {% if bot_settings.tiktok_enabled %}checked{% endif %}>
+                        </div>
+                    </div>
+                    <div class="mb-3 d-flex justify-content-between align-items-center">
+                        <label class="form-label mb-0"><i class="bi bi-snapchat" style="color:#fffc00;"></i> Snapchat</label>
+                        <div class="form-check form-switch">
+                            <input type="checkbox" name="snapchat_enabled" class="form-check-input" {% if bot_settings.snapchat_enabled %}checked{% endif %}>
+                        </div>
+                    </div>
+                    <div class="mb-3 d-flex justify-content-between align-items-center">
+                        <label class="form-label mb-0"><i class="bi bi-play-circle"></i> Likee</label>
+                        <div class="form-check form-switch">
+                            <input type="checkbox" name="likee_enabled" class="form-check-input" {% if bot_settings.likee_enabled %}checked{% endif %}>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Parallel yuklash limiti</label>
+                        <input type="number" name="parallel_download_limit" class="form-control" value="{{ bot_settings.parallel_download_limit }}">
+                    </div>
+                    <button type="submit" class="btn btn-accent w-100"><i class="bi bi-check-lg"></i> Saqlash</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Shazam Settings -->
+    <div class="col-lg-6">
+        <div class="glass-card">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="bi bi-music-note-beamed" style="color:var(--accent-cyan);"></i> Shazam sozlamalari</h6>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="section" value="shazam">
+                    <div class="mb-3">
+                        <label class="form-label">Kunlik Shazam limiti</label>
+                        <input type="number" name="shazam_daily_limit" class="form-control" value="{{ bot_settings.shazam_daily_limit }}">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Maks audio uzunligi (soniya)</label>
+                        <input type="number" name="shazam_max_audio_length" class="form-control" value="{{ bot_settings.shazam_max_audio_length }}">
+                    </div>
+                    <button type="submit" class="btn btn-accent w-100"><i class="bi bi-check-lg"></i> Saqlash</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Limit Settings -->
+    <div class="col-lg-6">
+        <div class="glass-card">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="bi bi-speedometer2" style="color:var(--accent-orange);"></i> Limit sozlamalari</h6>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="section" value="limits">
+                    <div class="mb-3">
+                        <label class="form-label">Bepul kunlik yuklash limiti</label>
+                        <input type="number" name="free_daily_download_limit" class="form-control" value="{{ bot_settings.free_daily_download_limit }}">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Premium kunlik yuklash limiti</label>
+                        <input type="number" name="premium_daily_download_limit" class="form-control" value="{{ bot_settings.premium_daily_download_limit }}">
+                    </div>
+                    <button type="submit" class="btn btn-accent w-100"><i class="bi bi-check-lg"></i> Saqlash</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

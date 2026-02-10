@@ -1,85 +1,114 @@
 {% extends 'dashboard/base.html' %}
 {% block title %}{{ profile }} — Bot boshqaruvi{% endblock %}
 {% block content %}
-<nav aria-label="breadcrumb" class="mb-3">
-    <ol class="breadcrumb">
-        <li class="breadcrumb-item"><a href="{% url 'dashboard:users' %}">Foydalanuvchilar</a></li>
-        <li class="breadcrumb-item active">{{ profile }}</li>
-    </ol>
+<nav class="mb-3">
+    <a href="{% url 'dashboard:users' %}" class="btn btn-glass btn-sm"><i class="bi bi-arrow-left"></i> Foydalanuvchilar</a>
 </nav>
-<h1 class="h4 mb-4">Foydalanuvchi: {{ profile }}</h1>
-<div class="row mb-4">
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-body">
-                <p class="mb-1"><strong>Telegram ID:</strong> <code>{{ profile.telegram_id }}</code></p>
-                {% if profile.username %}<p class="mb-1"><strong>Username:</strong> @{{ profile.username }}</p>{% endif %}
-                <p class="mb-1"><strong>Ism:</strong> {{ profile.first_name }} {{ profile.last_name|default:"" }}</p>
-                <p class="mb-1"><strong>Roʻyxatdan oʻtgan:</strong> {{ profile.created_at|date:"d.m.Y H:i" }}</p>
-                <p class="mb-0"><strong>Oxirgi faollik:</strong> {{ profile.last_active|date:"d.m.Y H:i" }}</p>
+
+<div class="row g-4 mb-4">
+    <!-- Profile Card -->
+    <div class="col-lg-4">
+        <div class="glass-card">
+            <div class="card-body text-center">
+                <div class="rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width:80px;height:80px;background:linear-gradient(135deg,var(--accent-blue),var(--accent-purple));font-size:2rem;">
+                    {{ profile.first_name|first }}
+                </div>
+                <h5>{{ profile.first_name }} {{ profile.last_name|default:"" }}</h5>
+                {% if profile.username %}<p class="text-muted">@{{ profile.username }}</p>{% endif %}
+                <p class="mb-1"><code style="color:var(--accent-cyan);">{{ profile.telegram_id }}</code></p>
+                <div class="d-flex justify-content-center gap-2 mt-3">
+                    {% if profile.is_premium %}<span class="badge badge-glow badge-warning"><i class="bi bi-star-fill"></i> Premium</span>{% endif %}
+                    {% if profile.is_banned %}<span class="badge badge-glow badge-danger"><i class="bi bi-lock-fill"></i> Bloklangan</span>{% endif %}
+                    {% if not profile.is_premium and not profile.is_banned %}<span class="badge badge-glow badge-success">Oddiy user</span>{% endif %}
+                </div>
+                <hr style="border-color:var(--border-glass);">
+                <div class="text-start small" style="color:var(--text-secondary);">
+                    <p class="mb-1"><i class="bi bi-calendar"></i> Roʻyxatdan oʻtgan: {{ profile.created_at|date:"d.m.Y H:i" }}</p>
+                    <p class="mb-0"><i class="bi bi-clock"></i> Oxirgi faollik: {{ profile.last_active|date:"d.m.Y H:i" }}</p>
+                </div>
             </div>
         </div>
     </div>
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-body">
-                <p class="mb-1"><strong>Premium:</strong> {% if profile.is_premium %}<span class="badge bg-warning text-dark">Ha</span>{% else %}<span class="badge bg-secondary">Yoʻq</span>{% endif %}</p>
-                <p class="mb-0"><strong>Blok:</strong> {% if profile.is_banned %}<span class="badge bg-danger">Bloklangan</span>{% else %}<span class="badge bg-success">Yoʻq</span>{% endif %}</p>
-                <a href="{% url 'dashboard:users' %}" class="btn btn-sm btn-outline-primary mt-2">Foydalanuvchilar roʻyxatiga qaytish</a>
+
+    <!-- Stats Cards -->
+    <div class="col-lg-8">
+        <div class="row g-3">
+            <div class="col-md-3 col-6">
+                <div class="glass-card p-3 text-center">
+                    <div class="stat-value counter-animate" style="color:var(--accent-purple);">{{ total_downloads }}</div>
+                    <div class="stat-label">Jami yuklash</div>
+                </div>
+            </div>
+            <div class="col-md-3 col-6">
+                <div class="glass-card p-3 text-center">
+                    <div class="stat-value counter-animate" style="color:var(--accent-green);">{{ successful_downloads }}</div>
+                    <div class="stat-label">Muvaffaqiyatli</div>
+                </div>
+            </div>
+            <div class="col-md-3 col-6">
+                <div class="glass-card p-3 text-center">
+                    <div class="stat-value counter-animate" style="color:var(--accent-cyan);">{{ total_shazam }}</div>
+                    <div class="stat-label">Jami Shazam</div>
+                </div>
+            </div>
+            <div class="col-md-3 col-6">
+                <div class="glass-card p-3 text-center">
+                    <div class="stat-value counter-animate" style="color:var(--accent-green);">{{ successful_shazam }}</div>
+                    <div class="stat-label">Shazam topildi</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Downloads Table -->
+        <div class="glass-card mt-3">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="bi bi-download"></i> Yuklashlar tarixi</h6>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive" style="max-height:300px;overflow-y:auto;">
+                    <table class="table table-dark-custom mb-0">
+                        <thead>
+                            <tr>
+                                <th>Video</th>
+                                <th>Platforma</th>
+                                <th>Holat</th>
+                                <th>Vaqt</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for d in downloads %}
+                            <tr>
+                                <td class="link-cell"><a href="{{ d.video_url }}" target="_blank" style="color:var(--text-secondary);">{{ d.video_title|truncatewords:5 }}</a></td>
+                                <td><span class="badge badge-glow badge-info">{{ d.get_platform_display }}</span></td>
+                                <td>
+                                    {% if d.status == 'completed' %}<span class="badge badge-glow badge-success">OK</span>
+                                    {% elif d.status == 'failed' %}<span class="badge badge-glow badge-danger">Xato</span>
+                                    {% else %}<span class="badge badge-glow badge-warning">{{ d.get_status_display }}</span>{% endif %}
+                                </td>
+                                <td><small class="text-muted">{{ d.downloaded_at|date:"d.m H:i" }}</small></td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="4" class="text-center text-muted py-3">Yuklashlar yoʻq</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
-<div class="card mb-4">
-    <div class="card-header bg-white">
-        <h5 class="mb-0">Yuborilgan havolalar (yuklashlar)</h5>
+<!-- Shazam Logs -->
+<div class="glass-card">
+    <div class="card-header">
+        <h6 class="mb-0"><i class="bi bi-music-note-beamed"></i> Shazam soʻrovlari</h6>
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
-            <table class="table table-hover mb-0">
-                <thead class="table-light">
+            <table class="table table-dark-custom mb-0">
+                <thead>
                     <tr>
-                        <th>Video / Havola</th>
-                        <th>Platforma</th>
-                        <th>Format</th>
-                        <th>Holat</th>
-                        <th>Vaqt</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for d in downloads %}
-                    <tr>
-                        <td>
-                            <a href="{{ d.video_url }}" target="_blank" rel="noopener" class="link-cell d-inline-block" style="max-width: 240px;" title="{{ d.video_url }}">{{ d.video_title|truncatewords:6 }}</a>
-                        </td>
-                        <td><span class="badge platform-badge bg-secondary">{{ d.get_platform_display }}</span></td>
-                        <td>{{ d.format_label }}</td>
-                        <td>
-                            {% if d.status == 'completed' %}<span class="badge bg-success">Yakunlandi</span>
-                            {% elif d.status == 'failed' %}<span class="badge bg-danger">Xatolik</span>
-                            {% else %}<span class="badge bg-warning text-dark">{{ d.get_status_display }}</span>{% endif %}
-                        </td>
-                        <td><small>{{ d.downloaded_at|date:"d.m.Y H:i" }}</small></td>
-                    </tr>
-                    {% empty %}
-                    <tr><td colspan="5" class="text-center text-muted py-4">Yuklashlar yoʻq</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-</div>
-
-<div class="card">
-    <div class="card-header bg-white">
-        <h5 class="mb-0">Shazam soʻrovlari</h5>
-    </div>
-    <div class="card-body p-0">
-        <div class="table-responsive">
-            <table class="table table-hover mb-0">
-                <thead class="table-light">
-                    <tr>
+                        <th>Audio fayl</th>
                         <th>Aniqlangan qoʻshiq</th>
                         <th>Ijrochi</th>
                         <th>Holat</th>
@@ -89,13 +118,17 @@
                 <tbody>
                     {% for s in shazam_logs %}
                     <tr>
-                        <td>{{ s.recognized_title|default:"—" }}</td>
+                        <td><small class="text-muted">{{ s.audio_file_name|truncatewords:3 }}</small></td>
+                        <td>{% if s.recognized_title %}<strong>{{ s.recognized_title }}</strong>{% else %}<span class="text-muted">—</span>{% endif %}</td>
                         <td>{{ s.recognized_artist|default:"—" }}</td>
-                        <td>{% if s.is_successful %}<span class="badge bg-success">Muvaffaqiyatli</span>{% else %}<span class="badge bg-danger">Aniqlanmadi</span>{% endif %}</td>
-                        <td><small>{{ s.recognized_at|date:"d.m.Y H:i" }}</small></td>
+                        <td>
+                            {% if s.is_successful %}<span class="badge badge-glow badge-success">Topildi</span>
+                            {% else %}<span class="badge badge-glow badge-danger">Topilmadi</span>{% endif %}
+                        </td>
+                        <td><small class="text-muted">{{ s.recognized_at|date:"d.m H:i" }}</small></td>
                     </tr>
                     {% empty %}
-                    <tr><td colspan="4" class="text-center text-muted py-4">Shazam soʻrovlari yoʻq</td></tr>
+                    <tr><td colspan="5" class="text-center text-muted py-3">Shazam soʻrovlari yoʻq</td></tr>
                     {% endfor %}
                 </tbody>
             </table>

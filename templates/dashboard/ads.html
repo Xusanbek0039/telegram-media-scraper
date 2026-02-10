@@ -1,0 +1,118 @@
+{% extends 'dashboard/base.html' %}
+{% block title %}Reklama kampaniyalari — Bot boshqaruvi{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="page-title">Reklama kampaniyalari</h1>
+        <p class="page-subtitle mb-0">Inline tugmali va rejalashtirish mumkin boʻlgan kampaniyalar</p>
+    </div>
+    <button class="btn btn-accent" data-bs-toggle="modal" data-bs-target="#newCampaignModal">
+        <i class="bi bi-plus-lg"></i> Yangi kampaniya
+    </button>
+</div>
+
+<!-- Campaigns list -->
+<div class="row g-3">
+    {% for c in campaigns %}
+    <div class="col-lg-6">
+        <div class="glass-card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h6 class="mb-0">{{ c.name }}</h6>
+                <div class="d-flex gap-1">
+                    {% if c.status == 'draft' %}
+                    <form method="post" class="d-inline">{% csrf_token %}
+                        <input type="hidden" name="action" value="send">
+                        <input type="hidden" name="campaign_id" value="{{ c.pk }}">
+                        <button class="btn btn-sm btn-accent"><i class="bi bi-send"></i> Yuborish</button>
+                    </form>
+                    {% endif %}
+                    <form method="post" class="d-inline">{% csrf_token %}
+                        <input type="hidden" name="action" value="delete">
+                        <input type="hidden" name="campaign_id" value="{{ c.pk }}">
+                        <button class="btn btn-sm btn-glass" style="color:var(--accent-red);"><i class="bi bi-trash"></i></button>
+                    </form>
+                </div>
+            </div>
+            <div class="card-body">
+                <p class="mb-2" style="color:var(--text-secondary);">{{ c.message|truncatewords:20 }}</p>
+                {% if c.button_text %}
+                <div class="mb-2">
+                    <span class="badge badge-glow badge-primary"><i class="bi bi-link-45deg"></i> {{ c.button_text }}</span>
+                </div>
+                {% endif %}
+                <div class="d-flex flex-wrap gap-2 small">
+                    <span class="badge badge-glow {% if c.status == 'sent' %}badge-success{% elif c.status == 'sending' %}badge-warning{% elif c.status == 'failed' %}badge-danger{% elif c.status == 'scheduled' %}badge-info{% else %}badge-primary{% endif %}">
+                        {{ c.get_status_display }}
+                    </span>
+                    <span class="badge badge-glow badge-purple">{{ c.get_target_audience_display }}</span>
+                    {% if c.scheduled_at %}<span class="text-muted"><i class="bi bi-calendar"></i> {{ c.scheduled_at|date:"d.m.Y H:i" }}</span>{% endif %}
+                    {% if c.sent_count %}<span class="text-muted"><i class="bi bi-check2-all"></i> {{ c.sent_count }} yuborildi</span>{% endif %}
+                    {% if c.failed_count %}<span style="color:var(--accent-red);"><i class="bi bi-x-circle"></i> {{ c.failed_count }} xato</span>{% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% empty %}
+    <div class="col-12">
+        <div class="glass-card">
+            <div class="card-body text-center text-muted py-5">
+                <i class="bi bi-megaphone" style="font-size:3rem;"></i>
+                <p class="mt-2">Hali kampaniyalar yoʻq</p>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- New Campaign Modal -->
+<div class="modal fade" id="newCampaignModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content" style="background:var(--bg-secondary);border:1px solid var(--border-glass);">
+            <div class="modal-header" style="border-color:var(--border-glass);">
+                <h5 class="modal-title">Yangi kampaniya yaratish</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="create">
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Kampaniya nomi</label>
+                            <input type="text" name="name" class="form-control" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Maqsadli auditoriya</label>
+                            <select name="target_audience" class="form-select">
+                                <option value="all">Barchasi</option>
+                                <option value="premium">Faqat Premium</option>
+                                <option value="free">Faqat bepul</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Xabar matni (HTML)</label>
+                            <textarea name="message" class="form-control" rows="4" required></textarea>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Tugma matni (ixtiyoriy)</label>
+                            <input type="text" name="button_text" class="form-control" placeholder="Masalan: Ko'proq ma'lumot">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Tugma havolasi</label>
+                            <input type="url" name="button_url" class="form-control" placeholder="https://...">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Rejalashtirish vaqti (ixtiyoriy)</label>
+                            <input type="datetime-local" name="scheduled_at" class="form-control">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer" style="border-color:var(--border-glass);">
+                    <button type="button" class="btn btn-glass" data-bs-dismiss="modal">Bekor qilish</button>
+                    <button type="submit" class="btn btn-accent"><i class="bi bi-check-lg"></i> Yaratish</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

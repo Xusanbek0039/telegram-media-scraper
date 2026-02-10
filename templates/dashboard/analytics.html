@@ -1,0 +1,167 @@
+{% extends 'dashboard/base.html' %}
+{% block title %}Analytics — Bot boshqaruvi{% endblock %}
+{% block content %}
+<div class="mb-4">
+    <h1 class="page-title">Analytics</h1>
+    <p class="page-subtitle mb-0">Chuqur statistika va tahlil</p>
+</div>
+
+<!-- Success Rates -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="glass-card p-3 text-center">
+            <div class="stat-value counter-animate" style="color:var(--accent-blue);">{{ total_dl }}</div>
+            <div class="stat-label">Jami yuklashlar</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="glass-card p-3 text-center">
+            <div class="stat-value" style="color:var(--accent-green);">{{ dl_rate }}%</div>
+            <div class="stat-label">Yuklash muvaffaqiyati</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="glass-card p-3 text-center">
+            <div class="stat-value counter-animate" style="color:var(--accent-cyan);">{{ total_shazam }}</div>
+            <div class="stat-label">Jami Shazam</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="glass-card p-3 text-center">
+            <div class="stat-value" style="color:var(--accent-green);">{{ shazam_rate }}%</div>
+            <div class="stat-label">Shazam muvaffaqiyati</div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Row 1 -->
+<div class="row g-3 mb-4">
+    <div class="col-lg-8">
+        <div class="glass-card">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="bi bi-graph-up-arrow"></i> Kunlik yuklashlar (30 kun)</h6>
+            </div>
+            <div class="card-body">
+                <canvas id="downloadsChart" height="80"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="glass-card">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="bi bi-pie-chart-fill"></i> Platformalar</h6>
+            </div>
+            <div class="card-body d-flex justify-content-center">
+                <canvas id="platformPie" height="200" style="max-width:280px;"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Row 2 -->
+<div class="row g-3 mb-4">
+    <div class="col-lg-8">
+        <div class="glass-card">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="bi bi-people-fill"></i> Kunlik yangi userlar (30 kun)</h6>
+            </div>
+            <div class="card-body">
+                <canvas id="usersChart" height="80"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="glass-card">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="bi bi-trophy-fill" style="color:var(--accent-orange);"></i> Eng aktiv userlar</h6>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-dark-custom mb-0">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>User</th>
+                                <th>Yuklashlar</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for u in active_users %}
+                            <tr>
+                                <td>
+                                    {% if forloop.counter == 1 %}<span style="color:gold;">{{ forloop.counter }}</span>
+                                    {% elif forloop.counter == 2 %}<span style="color:silver;">{{ forloop.counter }}</span>
+                                    {% elif forloop.counter == 3 %}<span style="color:#cd7f32;">{{ forloop.counter }}</span>
+                                    {% else %}{{ forloop.counter }}{% endif %}
+                                </td>
+                                <td><a href="{% url 'dashboard:user_detail' u.pk %}" class="text-decoration-none" style="color:var(--accent-blue);">{{ u }}</a></td>
+                                <td><span class="badge badge-glow badge-purple">{{ u.total_downloads }}</span></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var dailyDl = {{ daily_downloads|safe }};
+    var dailyUsers = {{ daily_users|safe }};
+    var platforms = {{ platform_stats|safe }};
+    var chartOpts = {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+            x: { ticks: { color: '#64748b', maxRotation: 45 }, grid: { color: 'rgba(255,255,255,0.04)' } },
+            y: { ticks: { color: '#64748b' }, grid: { color: 'rgba(255,255,255,0.04)' }, beginAtZero: true },
+        }
+    };
+    
+    new Chart(document.getElementById('downloadsChart'), {
+        type: 'bar',
+        data: {
+            labels: dailyDl.map(d => d.date),
+            datasets: [{
+                data: dailyDl.map(d => d.count),
+                backgroundColor: 'rgba(59,130,246,0.3)',
+                borderColor: '#3b82f6',
+                borderWidth: 1,
+                borderRadius: 4,
+            }]
+        },
+        options: chartOpts
+    });
+    
+    new Chart(document.getElementById('usersChart'), {
+        type: 'line',
+        data: {
+            labels: dailyUsers.map(d => d.date),
+            datasets: [{
+                data: dailyUsers.map(d => d.count),
+                borderColor: '#10b981',
+                backgroundColor: 'rgba(16,185,129,0.1)',
+                fill: true,
+                tension: 0.4,
+                pointRadius: 2,
+            }]
+        },
+        options: chartOpts
+    });
+    
+    var colors = ['#3b82f6','#10b981','#8b5cf6','#f59e0b','#ef4444','#06b6d4'];
+    new Chart(document.getElementById('platformPie'), {
+        type: 'doughnut',
+        data: {
+            labels: platforms.map(p => p.platform),
+            datasets: [{ data: platforms.map(p => p.count), backgroundColor: colors.slice(0, platforms.length), borderWidth: 0 }]
+        },
+        options: { responsive: true, cutout: '65%', plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8', padding: 10, font: { size: 11 } } } } }
+    });
+});
+</script>
+{% endblock %}

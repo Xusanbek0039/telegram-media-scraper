@@ -1,21 +1,33 @@
 {% extends 'dashboard/base.html' %}
-{% block title %}Reklama yuborish — Bot boshqaruvi{% endblock %}
+{% block title %}Broadcast — Bot boshqaruvi{% endblock %}
 {% block content %}
-<h1 class="h4 mb-4">Reklama yuborish</h1>
-<div class="row">
+<div class="mb-4">
+    <h1 class="page-title">Broadcast</h1>
+    <p class="page-subtitle mb-0">Barcha foydalanuvchilarga xabar yuborish</p>
+</div>
+
+<div class="row g-4">
     <div class="col-lg-6">
-        <div class="card mb-4">
-            <div class="card-header bg-white">
-                <h5 class="mb-0">Yangi reklama</h5>
+        <div class="glass-card">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="bi bi-send-fill"></i> Yangi broadcast</h6>
             </div>
             <div class="card-body">
-                <form method="post" action="{% url 'dashboard:broadcast' %}">
+                <form method="post">
                     {% csrf_token %}
                     <div class="mb-3">
-                        <label class="form-label">Xabar matni (HTML qoʻllab-quvvatlanadi)</label>
-                        <textarea name="message" class="form-control" rows="5" placeholder="Barcha foydalanuvchilarga yuboriladigan xabar..." required></textarea>
+                        <label class="form-label">Maqsadli auditoriya</label>
+                        <select name="target" class="form-select">
+                            <option value="all">Barchasi ({{ total_users }})</option>
+                            <option value="premium">Faqat Premium ({{ premium_users }})</option>
+                            <option value="free">Faqat bepul ({{ free_users }})</option>
+                        </select>
                     </div>
-                    <button type="submit" class="btn btn-primary">
+                    <div class="mb-3">
+                        <label class="form-label">Xabar matni (HTML)</label>
+                        <textarea name="message" class="form-control" rows="6" placeholder="Barcha foydalanuvchilarga yuboriladigan xabar..." required></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-accent w-100">
                         <i class="bi bi-send"></i> Yuborish
                     </button>
                 </form>
@@ -23,25 +35,31 @@
         </div>
     </div>
     <div class="col-lg-6">
-        <div class="card">
-            <div class="card-header bg-white">
-                <h5 class="mb-0">Oxirgi reklamalar</h5>
+        <div class="glass-card">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="bi bi-clock-history"></i> Oxirgi broadcastlar</h6>
             </div>
             <div class="card-body p-0">
-                <ul class="list-group list-group-flush">
+                <div class="list-group list-group-flush" style="background:transparent;">
                     {% for b in broadcasts %}
-                    <li class="list-group-item">
-                        <div class="d-flex justify-content-between">
-                            <span class="text-muted small">{{ b.created_at|date:"d.m.Y H:i" }}</span>
-                            <span class="badge {% if b.status == 'sent' %}bg-success{% elif b.status == 'sending' %}bg-warning text-dark{% elif b.status == 'failed' %}bg-danger{% else %}bg-secondary{% endif %}">{{ b.get_status_display }}</span>
+                    <div class="list-group-item" style="background:transparent;border-color:var(--border-glass);">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <small class="text-muted">{{ b.created_at|date:"d.m.Y H:i" }}</small>
+                            {% if b.status == 'sent' %}<span class="badge badge-glow badge-success">Yuborildi</span>
+                            {% elif b.status == 'sending' %}<span class="badge badge-glow badge-warning">Yuborilmoqda</span>
+                            {% elif b.status == 'failed' %}<span class="badge badge-glow badge-danger">Xatolik</span>
+                            {% else %}<span class="badge badge-glow badge-primary">Kutilmoqda</span>{% endif %}
                         </div>
-                        <p class="mb-1 mt-1">{{ b.message|truncatewords:15 }}</p>
-                        <small class="text-muted">Yuborildi: {{ b.sent_count }} | Xatolik: {{ b.failed_count }}</small>
-                    </li>
+                        <p class="mb-1 small" style="color:var(--text-secondary);">{{ b.message|truncatewords:15 }}</p>
+                        <small class="text-muted">
+                            <i class="bi bi-check2-all"></i> {{ b.sent_count }} |
+                            <i class="bi bi-x-circle"></i> {{ b.failed_count }}
+                        </small>
+                    </div>
                     {% empty %}
-                    <li class="list-group-item text-center text-muted">Hali reklama yuborilmagan</li>
+                    <div class="list-group-item text-center text-muted py-4" style="background:transparent;">Hali broadcast yuborilmagan</div>
                     {% endfor %}
-                </ul>
+                </div>
             </div>
         </div>
     </div>
