@@ -150,6 +150,17 @@ class BotSettings(models.Model):
     rate_limit_per_minute = models.PositiveIntegerField(default=10, verbose_name='Har minutda maksimal so\'rovlar')
     maintenance_message = models.TextField(blank=True, verbose_name='Texnik xizmat xabari')
     is_maintenance_mode = models.BooleanField(default=False, verbose_name='Texnik xizmat rejimi')
+    youtube_enabled = models.BooleanField(default=True, verbose_name='YouTube yoqilganmi')
+    instagram_enabled = models.BooleanField(default=True, verbose_name='Instagram yoqilganmi')
+    tiktok_enabled = models.BooleanField(default=True, verbose_name='TikTok yoqilganmi')
+    snapchat_enabled = models.BooleanField(default=True, verbose_name='Snapchat yoqilganmi')
+    likee_enabled = models.BooleanField(default=True, verbose_name='Likee yoqilganmi')
+    parallel_download_limit = models.PositiveIntegerField(default=3, verbose_name='Parallel yuklab olish limiti')
+    shazam_daily_limit = models.PositiveIntegerField(default=20, verbose_name='Shazam kunlik limit')
+    shazam_max_audio_length = models.PositiveIntegerField(default=60, verbose_name='Shazam maks audio uzunligi (soniya)')
+    free_daily_download_limit = models.PositiveIntegerField(default=5, verbose_name='Bepul kunlik yuklab olish limiti')
+    premium_daily_download_limit = models.PositiveIntegerField(default=100, verbose_name='Premium kunlik yuklab olish limiti')
+    ad_revenue_per_view = models.DecimalField(max_digits=10, decimal_places=4, default=0, verbose_name='Reklama daromadi (ko\u02BBrishga)')
 
     class Meta:
         verbose_name = 'Bot sozlamalari'
