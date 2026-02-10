@@ -1,50 +1,88 @@
 {% extends 'dashboard/base.html' %}
 {% block title %}Foydalanuvchilar — Bot boshqaruvi{% endblock %}
 {% block content %}
-<h1 class="h4 mb-4">Foydalanuvchilar</h1>
-<div class="card">
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="page-title">Foydalanuvchilar</h1>
+        <p class="page-subtitle mb-0">Jami: {{ total_count }} | Premium: {{ premium_count }} | Bloklangan: {{ banned_count }}</p>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="glass-card mb-4">
+    <div class="card-body py-3">
+        <form method="get" class="row g-2 align-items-end">
+            <div class="col-md-5">
+                <input type="text" name="q" class="form-control" placeholder="Username, ism yoki Telegram ID bo'yicha qidirish..." value="{{ search }}">
+            </div>
+            <div class="col-md-3">
+                <select name="filter" class="form-select">
+                    <option value="all" {% if filter_type == 'all' %}selected{% endif %}>Barchasi</option>
+                    <option value="premium" {% if filter_type == 'premium' %}selected{% endif %}>Premium</option>
+                    <option value="banned" {% if filter_type == 'banned' %}selected{% endif %}>Bloklangan</option>
+                    <option value="active" {% if filter_type == 'active' %}selected{% endif %}>Aktiv (24s)</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-accent w-100"><i class="bi bi-search"></i> Qidirish</button>
+            </div>
+            <div class="col-md-2">
+                <a href="{% url 'dashboard:users' %}" class="btn btn-glass w-100">Tozalash</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Users Table -->
+<div class="glass-card">
     <div class="card-body p-0">
         <div class="table-responsive">
-            <table class="table table-hover mb-0">
-                <thead class="table-light">
+            <table class="table table-dark-custom mb-0">
+                <thead>
                     <tr>
                         <th>Foydalanuvchi</th>
                         <th>Telegram ID</th>
                         <th>Yuklashlar</th>
                         <th>Shazam</th>
-                        <th>Premium</th>
-                        <th>Blok</th>
+                        <th>Status</th>
                         <th>Oxirgi faollik</th>
-                        <th></th>
+                        <th>Amallar</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for u in users %}
                     <tr>
                         <td>
-                            <a href="{% url 'dashboard:user_detail' u.pk %}" class="text-decoration-none fw-medium">{{ u.first_name }} {{ u.last_name|default:"" }}</a>
+                            <a href="{% url 'dashboard:user_detail' u.pk %}" class="text-decoration-none" style="color:var(--accent-blue);">
+                                {{ u.first_name }} {{ u.last_name|default:"" }}
+                            </a>
                             {% if u.username %}<br><small class="text-muted">@{{ u.username }}</small>{% endif %}
                         </td>
-                        <td><code>{{ u.telegram_id }}</code></td>
-                        <td>{{ u.downloads_count }}</td>
-                        <td>{{ u.shazam_count }}</td>
+                        <td><code style="color:var(--accent-cyan);">{{ u.telegram_id }}</code></td>
+                        <td><span class="badge badge-glow badge-purple">{{ u.downloads_count }}</span></td>
+                        <td><span class="badge badge-glow badge-info">{{ u.shazam_count }}</span></td>
                         <td>
-                            <button type="button" class="btn btn-sm {% if u.is_premium %}btn-warning{% else %}btn-outline-secondary{% endif %} btn-action user-premium" data-pk="{{ u.pk }}" data-premium="{{ u.is_premium|yesno:'1,0' }}">
-                                {% if u.is_premium %}<i class="bi bi-star-fill"></i> Premium{% else %}<i class="bi bi-star"></i> Yoʻq{% endif %}
-                            </button>
+                            {% if u.is_premium %}<span class="badge badge-glow badge-warning"><i class="bi bi-star-fill"></i> Premium</span>{% endif %}
+                            {% if u.is_banned %}<span class="badge badge-glow badge-danger"><i class="bi bi-lock-fill"></i> Blok</span>{% endif %}
+                            {% if not u.is_premium and not u.is_banned %}<span class="badge badge-glow badge-success">Oddiy</span>{% endif %}
                         </td>
+                        <td><small class="text-muted">{{ u.last_active|date:"d.m.Y H:i" }}</small></td>
                         <td>
-                            <button type="button" class="btn btn-sm {% if u.is_banned %}btn-danger{% else %}btn-outline-secondary{% endif %} btn-action user-ban" data-pk="{{ u.pk }}" data-banned="{{ u.is_banned|yesno:'1,0' }}">
-                                {% if u.is_banned %}<i class="bi bi-lock-fill"></i> Blok{% else %}<i class="bi bi-unlock"></i> Yoʻq{% endif %}
-                            </button>
-                        </td>
-                        <td><small>{{ u.last_active|date:"d.m.Y H:i" }}</small></td>
-                        <td>
-                            <a href="{% url 'dashboard:user_detail' u.pk %}" class="btn btn-sm btn-outline-primary">Tarix</a>
+                            <div class="d-flex gap-1">
+                                <button type="button" class="btn btn-sm {% if u.is_premium %}btn-warning{% else %}btn-glass{% endif %} user-premium" data-pk="{{ u.pk }}" title="Premium">
+                                    <i class="bi bi-star{% if u.is_premium %}-fill{% endif %}"></i>
+                                </button>
+                                <button type="button" class="btn btn-sm {% if u.is_banned %}btn-danger{% else %}btn-glass{% endif %} user-ban" data-pk="{{ u.pk }}" title="Ban/Unban">
+                                    <i class="bi bi-{% if u.is_banned %}lock-fill{% else %}unlock{% endif %}"></i>
+                                </button>
+                                <a href="{% url 'dashboard:user_detail' u.pk %}" class="btn btn-sm btn-glass" title="Tarix">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                            </div>
                         </td>
                     </tr>
                     {% empty %}
-                    <tr><td colspan="8" class="text-center text-muted py-4">Foydalanuvchilar yoʻq</td></tr>
+                    <tr><td colspan="7" class="text-center text-muted py-4">Foydalanuvchilar topilmadi</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
@@ -55,46 +93,21 @@
 
 {% block extra_js %}
 <script>
-var csrfToken = document.querySelector('meta[name=csrf-token]').getAttribute('content');
-function getCookie(n) { var c = document.cookie.match('(^|;)\\s*' + n + '\\s*=\\s*([^;]+)'); return c ? c.pop() : ''; }
-var csrf = csrfToken || getCookie('csrftoken');
-document.querySelectorAll('.user-premium').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-        var pk = this.dataset.pk;
-        var formData = new FormData();
-        formData.append('csrfmiddlewaretoken', csrf);
-        formData.append('X-CSRFToken', csrf);
-        fetch('/boshqaruv/foydalanuvchilar/' + pk + '/premium/', { method: 'POST', body: formData, headers: { 'X-CSRFToken': csrf, 'X-Requested-With': 'XMLHttpRequest' } })
-            .then(r => r.json()).then(function(data) {
-                if (data.ok) {
-                    if (data.is_premium) {
-                        btn.classList.remove('btn-outline-secondary'); btn.classList.add('btn-warning');
-                        btn.innerHTML = '<i class="bi bi-star-fill"></i> Premium';
-                    } else {
-                        btn.classList.remove('btn-warning'); btn.classList.add('btn-outline-secondary');
-                        btn.innerHTML = '<i class="bi bi-star"></i> Yoʻq';
-                    }
-                }
-            });
+var csrf = document.querySelector('meta[name=csrf-token]').getAttribute('content');
+function getCookie(n){var c=document.cookie.match('(^|;)\\s*'+n+'\\s*=\\s*([^;]+)');return c?c.pop():'';}
+csrf = csrf || getCookie('csrftoken');
+document.querySelectorAll('.user-premium').forEach(function(btn){
+    btn.addEventListener('click',function(){
+        var pk=this.dataset.pk;
+        fetch('/boshqaruv/foydalanuvchilar/'+pk+'/premium/',{method:'POST',headers:{'X-CSRFToken':csrf,'X-Requested-With':'XMLHttpRequest'},body:new URLSearchParams({csrfmiddlewaretoken:csrf})})
+        .then(r=>r.json()).then(function(data){if(data.ok)location.reload();});
     });
 });
-document.querySelectorAll('.user-ban').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-        var pk = this.dataset.pk;
-        var formData = new FormData();
-        formData.append('csrfmiddlewaretoken', csrf);
-        fetch('/boshqaruv/foydalanuvchilar/' + pk + '/ban/', { method: 'POST', body: formData, headers: { 'X-CSRFToken': csrf, 'X-Requested-With': 'XMLHttpRequest' } })
-            .then(r => r.json()).then(function(data) {
-                if (data.ok) {
-                    if (data.is_banned) {
-                        btn.classList.remove('btn-outline-secondary'); btn.classList.add('btn-danger');
-                        btn.innerHTML = '<i class="bi bi-lock-fill"></i> Blok';
-                    } else {
-                        btn.classList.remove('btn-danger'); btn.classList.add('btn-outline-secondary');
-                        btn.innerHTML = '<i class="bi bi-unlock"></i> Yoʻq';
-                    }
-                }
-            });
+document.querySelectorAll('.user-ban').forEach(function(btn){
+    btn.addEventListener('click',function(){
+        var pk=this.dataset.pk;
+        fetch('/boshqaruv/foydalanuvchilar/'+pk+'/ban/',{method:'POST',headers:{'X-CSRFToken':csrf,'X-Requested-With':'XMLHttpRequest'},body:new URLSearchParams({csrfmiddlewaretoken:csrf})})
+        .then(r=>r.json()).then(function(data){if(data.ok)location.reload();});
     });
 });
 </script>
