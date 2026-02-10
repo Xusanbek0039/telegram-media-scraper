@@ -1,23 +1,19 @@
 """Shared yt-dlp options with ffmpeg support"""
 import os
 
-# .env dan FFMPEG_PATH — ffmpeg.exe yo'li yoki papka
-FFMPEG_PATH = os.getenv('FFMPEG_PATH', '').strip()
+# .env dan FFMPEG_PATH — ffmpeg joylashgan papka yo'li
+FFMPEG_PATH = os.getenv('FFMPEG_PATH', '/home/adminmas/django-botv1/bot').strip()
 
 
 def _get_ffmpeg_dir():
     """ffmpeg joylashgan papkani qaytaradi (yt-dlp ffmpeg_location uchun)"""
     if not FFMPEG_PATH:
-        return None
+        return '/home/adminmas/django-botv1/bot'
     if os.path.isfile(FFMPEG_PATH):
         return os.path.dirname(FFMPEG_PATH)
     if os.path.isdir(FFMPEG_PATH):
-        # Papka — ichida ffmpeg.exe bo'lishi kerak
-        if os.path.isfile(os.path.join(FFMPEG_PATH, 'ffmpeg.exe')):
-            return FFMPEG_PATH
-        if os.path.isfile(os.path.join(FFMPEG_PATH, 'ffmpeg')):
-            return FFMPEG_PATH
-    return None
+        return FFMPEG_PATH
+    return '/home/adminmas/django-botv1/bot'
 
 
 def get_ydl_base_opts():
