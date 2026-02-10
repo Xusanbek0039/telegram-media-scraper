@@ -9,6 +9,10 @@ from core.models import (
     Broadcast,
     BotSettings,
     ShazamLog,
+    AdCampaign,
+    PremiumPlan,
+    ReferralStats,
+    ErrorLog,
 )
 
 __all__ = [
@@ -18,4 +22,8 @@ __all__ = [
     'Broadcast',
     'BotSettings',
     'ShazamLog',
+    'AdCampaign',
+    'PremiumPlan',
+    'ReferralStats',
+    'ErrorLog',
 ]
